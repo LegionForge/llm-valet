@@ -147,7 +147,7 @@ def _launchctl(action: str, label: str, plist: Path | None = None) -> bool:
     """
     import os
 
-    uid = os.getuid()  # type: ignore[attr-defined]  # macOS-only module
+    uid = os.getuid()  # type: ignore[attr-defined]  # not in Windows stubs; file is macOS-only
     domain = f"gui/{uid}"
 
     if action == "bootstrap":
