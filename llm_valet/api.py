@@ -34,17 +34,30 @@ def _configure_logging(settings: Settings) -> None:
     log_path = Path(settings.log_file).expanduser()
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
-    handler = logging.handlers.RotatingFileHandler(
+    json_formatter = logging.Formatter(
+        '{"time": "%(asctime)s", "level": "%(levelname)s",'
+        ' "logger": "%(name)s", "msg": "%(message)s"}'
+    )
+
+    file_handler = logging.handlers.RotatingFileHandler(
         log_path, maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8"
     )
-    logging.basicConfig(
-        level=logging.INFO,
-        format=(
-            '{"time": "%(asctime)s", "level": "%(levelname)s",'
-            ' "logger": "%(name)s", "msg": "%(message)s"}'
-        ),
-        handlers=[handler, logging.StreamHandler(sys.stdout)],
-    )
+    file_handler.setFormatter(json_formatter)
+
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(json_formatter)
+
+    logging.basicConfig(level=logging.INFO, handlers=[file_handler, console_handler])
+
+    # httpx logs every outgoing request at INFO — one per watchdog tick per
+    # Ollama API call. Suppress to WARNING to keep the log readable.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+
+    # Uvicorn's access log uses a plain-text format that breaks JSON log
+    # parsing. Disable it — our /status endpoint serves the same information.
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    logging.getLogger("uvicorn.access").propagate = False
 
 
 # ── App factory ───────────────────────────────────────────────────────────────
