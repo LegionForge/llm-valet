@@ -76,7 +76,19 @@ $ValetBin  = Join-Path $VenvDir "Scripts\llm-valet.exe"
 Write-Step 3 "Installing llm-valet..."
 
 & $VenvPy -m pip install --quiet --upgrade pip
-& $VenvPy -m pip install --quiet --upgrade llm-valet
+
+# If this script is running from inside a cloned repo (pyproject.toml exists
+# one level up), install from local source. Otherwise install from PyPI.
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$RepoRoot  = Split-Path -Parent $ScriptDir
+$LocalPyproject = Join-Path $RepoRoot "pyproject.toml"
+
+if (Test-Path $LocalPyproject) {
+    Write-Ok "Local repo detected — installing from source"
+    & $VenvPy -m pip install --quiet -e $RepoRoot
+} else {
+    & $VenvPy -m pip install --quiet --upgrade llm-valet
+}
 if ($LASTEXITCODE -ne 0) { Write-Fail "Package installation failed." }
 
 $installedVer = & $VenvPy -m pip show llm-valet 2>$null | Select-String "^Version:" | ForEach-Object { $_ -replace "Version:\s*","" }

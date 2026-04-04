@@ -62,8 +62,19 @@ VALET_BIN="$VENV_DIR/bin/llm-valet"
 # ── Step 3: Install package ───────────────────────────────────────────────────
 step 3 "Installing $PACKAGE..."
 "$VENV_PY" -m pip install --quiet --upgrade pip
-"$VENV_PY" -m pip install --quiet --upgrade "$PACKAGE"
-ok "Installed $(\"$VENV_PY\" -m pip show llm-valet 2>/dev/null | awk '/^Version:/{print $2}')"
+
+# If this script is running from inside a cloned repo (pyproject.toml exists
+# one level up), install from local source. Otherwise install from PyPI.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+if [[ -f "$REPO_ROOT/pyproject.toml" ]]; then
+  ok "Local repo detected — installing from source"
+  "$VENV_PY" -m pip install --quiet -e "$REPO_ROOT"
+else
+  "$VENV_PY" -m pip install --quiet --upgrade "$PACKAGE"
+fi
+ok "Installed $("$VENV_PY" -m pip show llm-valet 2>/dev/null | awk '/^Version:/{print $2}')"
 
 # ── Step 4: Write default config ──────────────────────────────────────────────
 step 4 "Writing configuration..."
