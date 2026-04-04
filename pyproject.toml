@@ -9,6 +9,22 @@ description = "Cross-platform LLM lifecycle manager with resource-pressure and g
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
+authors = [
+    { name = "JP Cruz", email = "jp@legionforge.org" },
+]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
+    "Topic :: System :: Monitoring",
+    "Topic :: System :: Systems Administration",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+]
 dependencies = [
     "fastapi>=0.111",
     "uvicorn[standard]>=0.29",
@@ -18,11 +34,98 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-nvidia = ["pynvml>=11.5"]
-dev = ["pytest>=8", "pytest-asyncio>=0.23", "httpx>=0.27"]
+# ── GPU/NPU monitoring extras ────────────────────────────────────────────────
+# Install the extra matching your hardware:
+#   pip install "llm-valet[nvidia]"    — NVIDIA GPUs (Linux/Windows), via pynvml
+#   pip install "llm-valet[amd]"       — AMD GPUs (Linux ROCm), via pyrsmi
+#   pip install "llm-valet[intel]"     — Intel Arc GPUs (Linux/Windows), via level-zero
+#   pip install "llm-valet[qualcomm]"  — Snapdragon X NPU (Windows Copilot+ PCs)
+#   pip install "llm-valet[directml]"  — Any DirectX 12 GPU on Windows (fallback)
+#
+# Apple Silicon (M-series): Metal GPU metrics implemented via ioreg — no extra needed.
+#
+# TODO v0.2: nvidia   — pynvml already integrated in resources/windows.py + linux.py
+# TODO v0.2: amd      — implement ROCm path in resources/linux.py using pyrsmi
+#                       https://github.com/RadeonOpenCompute/pyrsmi
+# TODO v0.2: intel    — implement Arc path using level-zero Python bindings
+#                       https://github.com/intel/level-zero
+# TODO v0.3: qualcomm — implement Snapdragon X NPU monitoring via Windows ML / QNN SDK
+#                       https://www.qualcomm.com/developer/software/qualcomm-ai-engine-direct-sdk
+# TODO v0.3: directml — implement DirectX 12 VRAM fallback for any Windows GPU vendor
+#                       via pydirectml or WMI Win32_VideoController queries
+nvidia   = ["pynvml>=11.5"]
+amd      = []   # stub — pyrsmi not yet integrated; see TODO v0.2 above
+intel    = []   # stub — level-zero not yet integrated; see TODO v0.2 above
+qualcomm = []   # stub — Snapdragon X NPU (Windows Copilot+ PCs); see TODO v0.3 above
+directml = []   # stub — DirectX 12 GPU fallback for Windows (any vendor); see TODO v0.3 above
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5",
+    "httpx>=0.27",
+    # static analysis
+    "ruff>=0.4",
+    "bandit[toml]>=1.7",
+    "mypy>=1.10",
+    "pip-audit>=2.7",
+    "semgrep>=1.70",
+    # git hooks
+    "pre-commit>=3.7",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "S", "B", "C4", "RUF"]
+ignore = [
+    "S603",   # subprocess call — we use shell=False throughout; reviewed
+    "S607",   # partial executable path — acceptable for system binaries (ioreg, launchctl, etc.)
+]
+
+[tool.bandit]
+exclude_dirs = [".venv", "venv", ".git"]
+skips = [
+    "B404",   # subprocess import — we use it with shell=False throughout; reviewed
+    "B603",   # subprocess without shell=True — we already enforce shell=False
+    "B607",   # partial path — same rationale as ruff S607
+]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
 
 [project.scripts]
 llm-valet = "llm_valet.api:main"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+addopts = "--cov=llm_valet --cov-report=term-missing --cov-fail-under=80"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["llm_valet"]
+omit = ["llm_valet/resources/macos.py", "llm_valet/resources/linux.py", "llm_valet/resources/windows.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "@abstractmethod",
+    "raise NotImplementedError",
+]
+
+[tool.hatch.envs.default.scripts]
+lint = [
+    "ruff check llm_valet svcmgr",
+    "bandit -r llm_valet svcmgr -c pyproject.toml",
+    "mypy llm_valet svcmgr",
+    "semgrep --config=p/python --config=p/fastapi llm_valet/",
+]
+test = "pytest"
+audit = "pip-audit"
 
 [tool.hatch.build.targets.wheel]
 packages = ["llm_valet"]

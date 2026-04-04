@@ -2,7 +2,6 @@ import enum
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 class PressureLevel(enum.Enum):
@@ -28,10 +27,10 @@ class CPUMetrics:
 @dataclass
 class GPUMetrics:
     available: bool              # False if no GPU driver accessible
-    vram_total_mb: Optional[int]
-    vram_used_mb: Optional[int]
-    vram_used_pct: Optional[float]
-    compute_pct: Optional[float]
+    vram_total_mb: int | None
+    vram_used_mb: int | None
+    vram_used_pct: float | None
+    compute_pct: float | None
 
 
 @dataclass
@@ -108,7 +107,7 @@ class ThresholdEngine:
         # GPU VRAM
         if gpu.available and gpu.vram_used_pct is not None:
             if gpu.vram_used_pct >= t.gpu_vram_pause_pct:
-                return True, f"GPU VRAM {gpu.vram_used_pct:.1f}% >= {t.gpu_vram_pause_pct}% threshold"
+                return True, f"GPU VRAM {gpu.vram_used_pct:.1f}% >= {t.gpu_vram_pause_pct}% threshold"  # noqa: E501
 
         return False, ""
 
