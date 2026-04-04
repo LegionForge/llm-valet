@@ -113,7 +113,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     async def require_api_key(
         request: Request,
-        x_api_key: Annotated[str, Header(default="")] = "",
+        x_api_key: Annotated[str, Header()] = "",
     ) -> None:
         """
         No auth required for 127.0.0.1 (localhost).
