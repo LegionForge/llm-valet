@@ -1,31 +1,37 @@
 #!/usr/bin/env bash
-# llm-valet install script — macOS / Linux
+# llm-valet installer — macOS and Linux
 # Usage: curl -fsSL https://raw.githubusercontent.com/LegionForge/llm-valet/main/install/install.sh | bash
 set -euo pipefail
 
-REPO="LegionForge/llm-valet"
-CONFIG_DIR="$HOME/.llm-valet"
-CONFIG_FILE="$CONFIG_DIR/config.yaml"
-MIN_PYTHON="3.11"
+INSTALL_DIR="$HOME/.llm-valet"
+VENV_DIR="$INSTALL_DIR/.venv"
+CONFIG_FILE="$INSTALL_DIR/config.yaml"
+PACKAGE="llm-valet"
+MIN_PYTHON_MAJOR=3
+MIN_PYTHON_MINOR=11
+STEPS=5
 
 # ── Colours ───────────────────────────────────────────────────────────────────
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
-info()    { echo -e "${GREEN}[llm-valet]${NC} $*"; }
-warn()    { echo -e "${YELLOW}[llm-valet]${NC} $*"; }
-error()   { echo -e "${RED}[llm-valet]${NC} $*" >&2; exit 1; }
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BOLD='\033[1m'; NC='\033[0m'
+step()  { echo -e "\n${BOLD}[$1/$STEPS]${NC} $2"; }
+ok()    { echo -e "  ${GREEN}✓${NC} $*"; }
+warn()  { echo -e "  ${YELLOW}!${NC} $*"; }
+die()   { echo -e "\n${RED}Error:${NC} $*\n" >&2; exit 1; }
 
-# ── Safety: refuse root ───────────────────────────────────────────────────────
+echo -e "\n${BOLD}llm-valet installer${NC}"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# ── Safety ───────────────────────────────────────────────────────────────────
 if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
-  error "Do not run this installer as root. Run as your normal user."
+  die "Do not run as root. Run as your normal user account."
 fi
 
-# ── Python version check ──────────────────────────────────────────────────────
+# ── Step 1: Python ────────────────────────────────────────────────────────────
+step 1 "Checking Python version..."
 PYTHON=""
 for cmd in python3 python; do
   if command -v "$cmd" &>/dev/null; then
-    ver=$("$cmd" -c "import sys; print('%d.%d' % sys.version_info[:2])")
-    if python3 -c "import sys; sys.exit(0 if sys.version_info >= (3,11) else 1)" 2>/dev/null \
-       || "$cmd" -c "import sys; sys.exit(0 if sys.version_info >= (3,11) else 1)" 2>/dev/null; then
+    if "$cmd" -c "import sys; sys.exit(0 if sys.version_info >= ($MIN_PYTHON_MAJOR, $MIN_PYTHON_MINOR) else 1)" 2>/dev/null; then
       PYTHON="$cmd"
       break
     fi
@@ -33,20 +39,37 @@ for cmd in python3 python; do
 done
 
 if [[ -z "$PYTHON" ]]; then
-  error "Python $MIN_PYTHON+ is required. Install it and re-run."
+  die "Python $MIN_PYTHON_MAJOR.$MIN_PYTHON_MINOR or newer is required.\n  macOS: brew install python\n  Ubuntu/Debian: sudo apt install python3\n  Download: https://python.org"
 fi
-info "Using Python: $($PYTHON --version)"
+ok "Found $($PYTHON --version)"
 
-# ── Install package ───────────────────────────────────────────────────────────
-info "Installing llm-valet..."
-"$PYTHON" -m pip install --upgrade "llm-valet" 2>&1 | tail -5
+# ── Step 2: Create install directory ─────────────────────────────────────────
+step 2 "Setting up install directory at $INSTALL_DIR..."
+mkdir -p "$INSTALL_DIR"
+chmod 700 "$INSTALL_DIR"
 
-# ── Create config directory ───────────────────────────────────────────────────
-mkdir -p "$CONFIG_DIR"
-chmod 700 "$CONFIG_DIR"
+# Create the isolated virtual environment (or reuse it on upgrade)
+if [[ -d "$VENV_DIR" ]]; then
+  ok "Existing environment found — upgrading in place"
+else
+  "$PYTHON" -m venv "$VENV_DIR"
+  ok "Created isolated Python environment"
+fi
 
-if [[ ! -f "$CONFIG_FILE" ]]; then
-  info "Writing default config to $CONFIG_FILE"
+VENV_PY="$VENV_DIR/bin/python"
+VALET_BIN="$VENV_DIR/bin/llm-valet"
+
+# ── Step 3: Install package ───────────────────────────────────────────────────
+step 3 "Installing $PACKAGE..."
+"$VENV_PY" -m pip install --quiet --upgrade pip
+"$VENV_PY" -m pip install --quiet --upgrade "$PACKAGE"
+ok "Installed $(\"$VENV_PY\" -m pip show llm-valet 2>/dev/null | awk '/^Version:/{print $2}')"
+
+# ── Step 4: Write default config ──────────────────────────────────────────────
+step 4 "Writing configuration..."
+if [[ -f "$CONFIG_FILE" ]]; then
+  ok "Config already exists — keeping your existing settings"
+else
   cat > "$CONFIG_FILE" <<'EOF'
 # llm-valet configuration
 # Full reference: https://github.com/LegionForge/llm-valet
@@ -56,7 +79,7 @@ port: 8765
 provider: ollama
 ollama_url: http://127.0.0.1:11434
 model_name:       # leave blank to auto-detect loaded model
-api_key:          # required when host is 0.0.0.0
+api_key:          # required when host is not 127.0.0.1
 
 thresholds:
   ram_pause_pct: 85.0
@@ -68,29 +91,31 @@ thresholds:
   check_interval_seconds: 10
 EOF
   chmod 600 "$CONFIG_FILE"
-else
-  warn "Config already exists — skipping: $CONFIG_FILE"
+  ok "Default config written to $CONFIG_FILE"
 fi
 
-# ── macOS: install LaunchAgent ────────────────────────────────────────────────
-if [[ "$(uname)" == "Darwin" ]]; then
-  LAUNCH_AGENTS="$HOME/Library/LaunchAgents"
-  PLIST="$LAUNCH_AGENTS/com.legionforge.llm-valet.plist"
-  VALET_BIN="$(command -v llm-valet 2>/dev/null || echo "")"
+# ── Step 5: Register auto-start service ──────────────────────────────────────
+step 5 "Registering auto-start service..."
 
-  if [[ -z "$VALET_BIN" ]]; then
-    warn "llm-valet binary not found in PATH — skipping LaunchAgent install"
-  else
-    mkdir -p "$LAUNCH_AGENTS"
-    info "Installing LaunchAgent: $PLIST"
-    cat > "$PLIST" <<EOF
+if [[ "$(uname)" == "Darwin" ]]; then
+  # ── macOS: LaunchAgent ─────────────────────────────────────────────────────
+  LAUNCH_AGENTS="$HOME/Library/LaunchAgents"
+  PLIST_LABEL="com.legionforge.llm-valet"
+  PLIST="$LAUNCH_AGENTS/$PLIST_LABEL.plist"
+  mkdir -p "$LAUNCH_AGENTS"
+
+  # Unload any previous version before writing new plist
+  UID_VAL="$(id -u)"
+  launchctl bootout "gui/$UID_VAL" "$PLIST" 2>/dev/null || true
+
+  cat > "$PLIST" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.legionforge.llm-valet</string>
+  <string>${PLIST_LABEL}</string>
   <key>ProgramArguments</key>
   <array>
     <string>${VALET_BIN}</string>
@@ -100,32 +125,25 @@ if [[ "$(uname)" == "Darwin" ]]; then
   <key>KeepAlive</key>
   <true/>
   <key>StandardOutPath</key>
-  <string>${CONFIG_DIR}/valet.stdout.log</string>
+  <string>${INSTALL_DIR}/valet.stdout.log</string>
   <key>StandardErrorPath</key>
-  <string>${CONFIG_DIR}/valet.stderr.log</string>
+  <string>${INSTALL_DIR}/valet.stderr.log</string>
 </dict>
 </plist>
 EOF
-    chmod 644 "$PLIST"
+  chmod 644 "$PLIST"
+  launchctl bootstrap "gui/$UID_VAL" "$PLIST" 2>/dev/null && ok "LaunchAgent registered — starts automatically at login" || warn "LaunchAgent registered (will start on next login)"
 
-    # Load the agent for the current session
-    UID_VAL="$(id -u)"
-    launchctl bootstrap "gui/$UID_VAL" "$PLIST" 2>/dev/null || true
-    info "LaunchAgent loaded — llm-valet will auto-start on login"
-  fi
-fi
-
-# ── Linux: install systemd user service ──────────────────────────────────────
-if [[ "$(uname)" == "Linux" ]]; then
-  SYSTEMD_DIR="$HOME/.config/systemd/user"
-  SERVICE="$SYSTEMD_DIR/llm-valet.service"
-  VALET_BIN="$(command -v llm-valet 2>/dev/null || echo "")"
-
-  if [[ -z "$VALET_BIN" ]]; then
-    warn "llm-valet binary not found in PATH — skipping systemd service install"
-  elif command -v systemctl &>/dev/null; then
+elif [[ "$(uname)" == "Linux" ]]; then
+  # ── Linux: systemd user service ────────────────────────────────────────────
+  if ! command -v systemctl &>/dev/null; then
+    warn "systemctl not found — auto-start not configured"
+    warn "Start manually: $VALET_BIN"
+  else
+    SYSTEMD_DIR="$HOME/.config/systemd/user"
+    SERVICE="$SYSTEMD_DIR/llm-valet.service"
     mkdir -p "$SYSTEMD_DIR"
-    info "Installing systemd user service: $SERVICE"
+
     cat > "$SERVICE" <<EOF
 [Unit]
 Description=llm-valet — LLM lifecycle manager
@@ -141,21 +159,26 @@ WantedBy=default.target
 EOF
     systemctl --user daemon-reload
     systemctl --user enable llm-valet
-    systemctl --user start  llm-valet
-    info "systemd user service enabled and started"
-  else
-    warn "systemctl not found — skipping service install (run llm-valet manually)"
+    systemctl --user start  llm-valet 2>/dev/null || true
+    ok "systemd user service enabled — starts automatically at login"
   fi
+
+else
+  warn "Unsupported platform '$(uname)' — auto-start not configured"
+  warn "Start manually: $VALET_BIN"
 fi
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""
-info "Installation complete."
-echo ""
-echo "  WebUI:   http://localhost:8765"
+echo -e "${GREEN}${BOLD}Installation complete!${NC}"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "  WebUI:    http://localhost:8765"
 echo "  API docs: http://localhost:8765/docs"
 echo "  Config:   $CONFIG_FILE"
 echo ""
-echo "  Manual start:  llm-valet"
-echo "  Manual control: curl -X POST http://localhost:8765/pause"
+echo "  Start manually:   $VALET_BIN"
+echo "  Pause:            curl -X POST http://localhost:8765/pause"
+echo "  Resume:           curl -X POST http://localhost:8765/resume"
+echo ""
+echo "  To uninstall: bash <(curl -fsSL https://raw.githubusercontent.com/LegionForge/llm-valet/main/install/uninstall.sh)"
 echo ""

@@ -1,63 +1,93 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    llm-valet install script for Windows.
+    llm-valet installer for Windows.
 .DESCRIPTION
-    Installs llm-valet via pip, writes a default config, and optionally
-    registers a Windows Task Scheduler task for auto-start on login.
+    Installs llm-valet into an isolated Python environment under %USERPROFILE%\.llm-valet,
+    writes a default config, and registers a Task Scheduler task to auto-start on login.
 .EXAMPLE
     irm https://raw.githubusercontent.com/LegionForge/llm-valet/main/install/install.ps1 | iex
 #>
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$ConfigDir  = Join-Path $env:USERPROFILE ".llm-valet"
-$ConfigFile = Join-Path $ConfigDir "config.yaml"
+$InstallDir = Join-Path $env:USERPROFILE ".llm-valet"
+$VenvDir    = Join-Path $InstallDir ".venv"
+$ConfigFile = Join-Path $InstallDir "config.yaml"
 $TaskName   = "llm-valet"
+$Steps      = 5
 
-function Write-Info  { param($msg) Write-Host "[llm-valet] $msg" -ForegroundColor Green  }
-function Write-Warn  { param($msg) Write-Host "[llm-valet] $msg" -ForegroundColor Yellow }
-function Write-Err   { param($msg) Write-Host "[llm-valet] $msg" -ForegroundColor Red; exit 1 }
+function Write-Step { param([int]$n, [string]$msg) Write-Host "`n[$n/$Steps] $msg" -ForegroundColor White }
+function Write-Ok   { param([string]$msg) Write-Host "  [OK] $msg" -ForegroundColor Green  }
+function Write-Warn { param([string]$msg) Write-Host "  [!]  $msg" -ForegroundColor Yellow }
+function Write-Fail { param([string]$msg) Write-Host "`nError: $msg`n" -ForegroundColor Red; exit 1 }
+
+Write-Host "`nllm-valet installer" -ForegroundColor White
+Write-Host ("━" * 40)
 
 # ── Safety: refuse Administrator ─────────────────────────────────────────────
 $principal = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
 if ($principal.IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)) {
-    Write-Err "Do not run this installer as Administrator. Run as your normal user."
+    Write-Fail "Do not run as Administrator. Open a normal (non-elevated) PowerShell window."
 }
 
-# ── Python version check ──────────────────────────────────────────────────────
-$python = $null
+# ── Step 1: Python ────────────────────────────────────────────────────────────
+Write-Step 1 "Checking Python version..."
+
+$Python = $null
 foreach ($cmd in @("python", "python3", "py")) {
     try {
         $ver = & $cmd -c "import sys; print('%d.%d' % sys.version_info[:2])" 2>$null
-        $major, $minor = $ver.Split('.') | ForEach-Object { [int]$_ }
-        if ($major -gt 3 -or ($major -eq 3 -and $minor -ge 11)) {
-            $python = $cmd
-            break
+        if ($LASTEXITCODE -eq 0 -and $ver) {
+            $parts = $ver.Split('.')
+            $major = [int]$parts[0]; $minor = [int]$parts[1]
+            if ($major -gt 3 -or ($major -eq 3 -and $minor -ge 11)) {
+                $Python = $cmd; break
+            }
         }
     } catch { continue }
 }
 
-if (-not $python) {
-    Write-Err "Python 3.11+ is required. Download from https://python.org and re-run."
+if (-not $Python) {
+    Write-Fail "Python 3.11 or newer is required.`n  Download it from https://python.org`n  During install, check 'Add Python to PATH'."
 }
-Write-Info "Using Python: $(& $python --version)"
+Write-Ok "Found $(& $Python --version)"
 
-# ── Install package ───────────────────────────────────────────────────────────
-Write-Info "Installing llm-valet..."
-& $python -m pip install --upgrade llm-valet
-if ($LASTEXITCODE -ne 0) { Write-Err "pip install failed." }
+# ── Step 2: Create install directory and venv ─────────────────────────────────
+Write-Step 2 "Setting up install directory at $InstallDir..."
 
-# ── Create config directory ───────────────────────────────────────────────────
-if (-not (Test-Path $ConfigDir)) {
-    New-Item -ItemType Directory -Path $ConfigDir | Out-Null
+if (-not (Test-Path $InstallDir)) {
+    New-Item -ItemType Directory -Path $InstallDir | Out-Null
+}
+# Restrict directory to current user (mirrors chmod 700)
+icacls $InstallDir /inheritance:r /grant:r "${env:USERNAME}:(OI)(CI)F" 2>&1 | Out-Null
+
+if (Test-Path $VenvDir) {
+    Write-Ok "Existing environment found — upgrading in place"
+} else {
+    & $Python -m venv $VenvDir
+    Write-Ok "Created isolated Python environment"
 }
 
-# Restrict config dir to current user only (icacls — no PowerShell native equivalent)
-icacls $ConfigDir /inheritance:r /grant:r "${env:USERNAME}:(OI)(CI)F" | Out-Null
+$VenvPy    = Join-Path $VenvDir "Scripts\python.exe"
+$ValetBin  = Join-Path $VenvDir "Scripts\llm-valet.exe"
 
-if (-not (Test-Path $ConfigFile)) {
-    Write-Info "Writing default config to $ConfigFile"
+# ── Step 3: Install package ───────────────────────────────────────────────────
+Write-Step 3 "Installing llm-valet..."
+
+& $VenvPy -m pip install --quiet --upgrade pip
+& $VenvPy -m pip install --quiet --upgrade llm-valet
+if ($LASTEXITCODE -ne 0) { Write-Fail "Package installation failed." }
+
+$installedVer = & $VenvPy -m pip show llm-valet 2>$null | Select-String "^Version:" | ForEach-Object { $_ -replace "Version:\s*","" }
+Write-Ok "Installed version $installedVer"
+
+# ── Step 4: Write default config ──────────────────────────────────────────────
+Write-Step 4 "Writing configuration..."
+
+if (Test-Path $ConfigFile) {
+    Write-Ok "Config already exists — keeping your existing settings"
+} else {
     @'
 # llm-valet configuration
 # Full reference: https://github.com/LegionForge/llm-valet
@@ -67,7 +97,7 @@ port: 8765
 provider: ollama
 ollama_url: http://127.0.0.1:11434
 model_name:       # leave blank to auto-detect loaded model
-api_key:          # required when host is 0.0.0.0
+api_key:          # required when host is not 127.0.0.1
 
 thresholds:
   ram_pause_pct: 85.0
@@ -80,31 +110,33 @@ thresholds:
 '@ | Set-Content -Path $ConfigFile -Encoding UTF8
 
     # Restrict config file to current user (mirrors chmod 600)
-    icacls $ConfigFile /inheritance:r /grant:r "${env:USERNAME}:F" | Out-Null
+    icacls $ConfigFile /inheritance:r /grant:r "${env:USERNAME}:F" 2>&1 | Out-Null
+    Write-Ok "Default config written to $ConfigFile"
+}
+
+# ── Step 5: Task Scheduler auto-start ─────────────────────────────────────────
+Write-Step 5 "Registering auto-start task..."
+
+if (-not (Test-Path $ValetBin)) {
+    Write-Warn "llm-valet.exe not found at expected path — skipping auto-start"
+    Write-Warn "Start manually: $ValetBin"
 } else {
-    Write-Warn "Config already exists — skipping: $ConfigFile"
-}
+    $existing = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
 
-# ── Find llm-valet executable ─────────────────────────────────────────────────
-$valetBin = (Get-Command "llm-valet" -ErrorAction SilentlyContinue)?.Source
-if (-not $valetBin) {
-    # Try Scripts directory in user Python path
-    $scripts = & $python -c "import sysconfig; print(sysconfig.get_path('scripts'))"
-    $candidate = Join-Path $scripts "llm-valet.exe"
-    if (Test-Path $candidate) { $valetBin = $candidate }
-}
-
-# ── Task Scheduler: auto-start on login ──────────────────────────────────────
-if ($valetBin) {
-    $existingTask = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
-
-    if ($existingTask) {
-        Write-Warn "Scheduled task '$TaskName' already exists — skipping"
+    if ($existing) {
+        # Update the existing task to pick up any path changes
+        $action   = New-ScheduledTaskAction -Execute $ValetBin
+        $trigger  = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+        $settings = New-ScheduledTaskSettingsSet `
+            -ExecutionTimeLimit (New-TimeSpan -Hours 0) `
+            -RestartCount 3 `
+            -RestartInterval (New-TimeSpan -Minutes 1) `
+            -StartWhenAvailable
+        Set-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings | Out-Null
+        Write-Ok "Updated existing auto-start task"
     } else {
-        Write-Info "Registering Task Scheduler task: $TaskName"
-
-        $action  = New-ScheduledTaskAction -Execute $valetBin
-        $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+        $action   = New-ScheduledTaskAction -Execute $ValetBin
+        $trigger  = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
         $settings = New-ScheduledTaskSettingsSet `
             -ExecutionTimeLimit (New-TimeSpan -Hours 0) `
             -RestartCount 3 `
@@ -118,24 +150,25 @@ if ($valetBin) {
             -Settings  $settings `
             -RunLevel  Limited `
             -Force | Out-Null
-
-        # Start it immediately for this session
-        Start-ScheduledTask -TaskName $TaskName
-        Write-Info "Task registered and started — llm-valet will auto-start on login"
+        Write-Ok "Registered auto-start task — llm-valet will start on login"
     }
-} else {
-    Write-Warn "llm-valet executable not found in PATH — skipping Task Scheduler registration"
-    Write-Warn "Run manually: python -m llm_valet.api"
+
+    # Start now for this session
+    Start-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+    Write-Ok "Started for this session"
 }
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 Write-Host ""
-Write-Info "Installation complete."
-Write-Host ""
+Write-Host "Installation complete!" -ForegroundColor Green
+Write-Host ("━" * 40)
 Write-Host "  WebUI:    http://localhost:8765"
 Write-Host "  API docs: http://localhost:8765/docs"
 Write-Host "  Config:   $ConfigFile"
 Write-Host ""
-Write-Host "  Manual start:   llm-valet"
-Write-Host "  Manual control: curl -X POST http://localhost:8765/pause"
+Write-Host "  Start manually:   $ValetBin"
+Write-Host "  Pause:            curl -X POST http://localhost:8765/pause"
+Write-Host "  Resume:           curl -X POST http://localhost:8765/resume"
+Write-Host ""
+Write-Host "  To uninstall: run install\uninstall.ps1"
 Write-Host ""
