@@ -38,6 +38,9 @@ class OllamaProvider(LLMProvider):
         self._base_url = base_url.rstrip("/")
         self._model_name = model_name
         self._timeout = request_timeout
+        # Cached at pause time — /api/ps is empty after eviction, so resume
+        # needs to remember which model to reload.
+        self._last_loaded_model: str | None = None
 
     # ── LLMProvider interface ─────────────────────────────────────────────────
 
@@ -58,6 +61,7 @@ class OllamaProvider(LLMProvider):
                 data = resp.json()
                 success = data.get("done_reason") == "unload"
                 if success:
+                    self._last_loaded_model = model
                     logger.info("model unloaded", extra={"model": model})
                 else:
                     logger.warning(
@@ -212,9 +216,12 @@ class OllamaProvider(LLMProvider):
 
     async def _resolve_model(self) -> str | None:
         """
-        Return the model name to act on.
-        Prefers config model_name; falls back to the first loaded model from /api/ps.
-        Returns None if no model is loaded and no name is configured.
+        Return the model name to act on. Resolution order:
+          1. Configured model_name (config.yaml / constructor arg)
+          2. First model currently loaded in /api/ps
+          3. Last model we successfully paused (_last_loaded_model cache)
+             — /api/ps is empty after eviction, so resume needs this fallback.
+        Returns None if no model name can be determined by any method.
         """
         if self._model_name:
             if not _MODEL_NAME_RE.match(self._model_name):
@@ -225,7 +232,7 @@ class OllamaProvider(LLMProvider):
                 return None
             return self._model_name
 
-        # Fall back to whatever is currently loaded
+        # Check what is currently loaded
         try:
             async with httpx.AsyncClient(timeout=self._timeout) as client:
                 resp = await client.get(f"{self._base_url}/api/ps")
@@ -235,6 +242,14 @@ class OllamaProvider(LLMProvider):
                     return str(models[0].get("name", "")) or None
         except httpx.HTTPError:
             pass
+
+        # Fall back to the last model we paused — lets resume work after eviction
+        if self._last_loaded_model:
+            logger.info(
+                "model not in /api/ps — using last known model",
+                extra={"model": self._last_loaded_model},
+            )
+            return self._last_loaded_model
 
         return None
 
