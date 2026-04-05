@@ -3,6 +3,7 @@ import pytest
 
 from llm_valet.resources.base import (
     CPUMetrics,
+    DiskMetrics,
     GPUMetrics,
     MemoryMetrics,
     PressureLevel,
@@ -37,6 +38,7 @@ def _metrics(
             vram_used_pct=vram_pct,
             compute_pct=None,
         ),
+        disk=DiskMetrics(path="/", total_mb=512000, used_mb=256000, free_mb=256000, used_pct=50.0),
     )
 
 

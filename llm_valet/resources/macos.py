@@ -7,6 +7,7 @@ import psutil
 
 from llm_valet.resources.base import (
     CPUMetrics,
+    DiskMetrics,
     GPUMetrics,
     MemoryMetrics,
     PressureLevel,
@@ -24,10 +25,11 @@ class MacOSResourceCollector(ResourceCollector):
             memory=self._collect_memory(),
             cpu=self._collect_cpu(),
             gpu=self._collect_gpu(),
+            disk=self.collect_disk(),
         )
 
     def supported_metrics(self) -> set[str]:
-        return {"memory", "cpu", "gpu", "pressure"}
+        return {"memory", "cpu", "gpu", "pressure", "disk"}
 
     # ── Memory ────────────────────────────────────────────────────────────────
 

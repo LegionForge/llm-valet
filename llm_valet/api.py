@@ -292,6 +292,13 @@ def _metrics_to_dict(m: SystemMetrics) -> dict[str, Any]:
             "vram_used_pct": m.gpu.vram_used_pct,
             "compute_pct": m.gpu.compute_pct,
         },
+        "disk": {
+            "path": m.disk.path,
+            "total_mb": m.disk.total_mb,
+            "used_mb": m.disk.used_mb,
+            "free_mb": m.disk.free_mb,
+            "used_pct": m.disk.used_pct,
+        },
         "timestamp": m.timestamp,
     }
 

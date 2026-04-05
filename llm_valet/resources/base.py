@@ -1,7 +1,10 @@
 import enum
+import sys
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+
+import psutil
 
 
 class PressureLevel(enum.Enum):
@@ -34,10 +37,20 @@ class GPUMetrics:
 
 
 @dataclass
+class DiskMetrics:
+    path: str               # monitored mount point ("/" or "C:\\")
+    total_mb: int
+    used_mb: int
+    free_mb: int
+    used_pct: float
+
+
+@dataclass
 class SystemMetrics:
     memory: MemoryMetrics
     cpu: CPUMetrics
     gpu: GPUMetrics
+    disk: DiskMetrics
     timestamp: float = field(default_factory=time.time)
 
 
@@ -47,8 +60,26 @@ class ResourceCollector(ABC):
 
     @abstractmethod
     def supported_metrics(self) -> set[str]: ...
-    # e.g. {"memory", "cpu", "gpu", "pressure"}
+    # e.g. {"memory", "cpu", "gpu", "pressure", "disk"}
     # Callers check this before trusting Optional fields
+
+    def collect_disk(self) -> DiskMetrics:
+        """
+        Cross-platform disk usage for the system root volume.
+        psutil.disk_usage() is identical on macOS, Linux, and Windows —
+        no need to override in platform subclasses.
+        A full root disk crashes model downloads and can corrupt Ollama's
+        model index, making this a safety metric rather than informational.
+        """
+        path = "C:\\" if sys.platform == "win32" else "/"
+        usage = psutil.disk_usage(path)
+        return DiskMetrics(
+            path=path,
+            total_mb=usage.total // (1024 * 1024),
+            used_mb=usage.used // (1024 * 1024),
+            free_mb=usage.free // (1024 * 1024),
+            used_pct=usage.percent,
+        )
 
 
 @dataclass
