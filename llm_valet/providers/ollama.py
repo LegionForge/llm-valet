@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import re
+import sys
 from typing import Any
 
 import httpx
@@ -95,14 +96,18 @@ class OllamaProvider(LLMProvider):
 
     async def start(self) -> bool:
         """
-        Start the Ollama service via platform service manager.
-        This method is intentionally thin — the heavy lifting belongs in
-        svcmgr/macos.py (launchctl) which is wired up at a higher layer.
-        Here we just verify the service comes up within the timeout.
+        Start the Ollama service via platform service manager, then wait for it
+        to become healthy.
         """
         if await self.health_check():
             logger.info("start called but Ollama is already running")
             return True
+
+        started = _svcmgr_start()
+        if not started:
+            logger.error("svcmgr start_service() failed")
+            return False
+
         logger.info("waiting for Ollama to start")
         for _ in range(30):
             await asyncio.sleep(2)
@@ -118,40 +123,31 @@ class OllamaProvider(LLMProvider):
 
         Sequence:
           1. pause() — unload model cleanly
-          2. SIGTERM to ollama serve process
+          2. svcmgr.stop_service() — platform-aware stop (launchctl bootout on
+             macOS brew, osascript on macOS app, psutil SIGTERM fallback)
           3. Poll health_check() until False (30s timeout)
-          4. SIGKILL if still alive
+          4. psutil SIGKILL if still alive after svcmgr
         """
         await self.pause()
 
-        proc = _find_ollama_process()
-        if proc is None:
-            logger.info("stop called but no Ollama process found")
-            return True
+        stopped = _svcmgr_stop()
+        if not stopped:
+            logger.warning("svcmgr stop_service() returned False — trying psutil fallback")
 
-        logger.info("sending SIGTERM to Ollama", extra={"pid": proc.pid})
-        try:
-            proc.terminate()
-        except psutil.NoSuchProcess:
-            return True
-        except psutil.AccessDenied:
-            logger.error("SIGTERM denied — check process ownership")
-            return False
-
-        # Poll until dead or timeout
+        # Poll to confirm Ollama is down
         for _ in range(_SIGTERM_TIMEOUT_S // _POLL_INTERVAL_S):
             await asyncio.sleep(_POLL_INTERVAL_S)
             if not await self.health_check():
-                logger.info("Ollama stopped gracefully")
+                logger.info("Ollama stopped")
                 return True
 
-        # Escalate to SIGKILL
-        logger.warning(
-            "Ollama did not stop after SIGTERM — escalating to SIGKILL",
-            extra={"pid": proc.pid},
-        )
+        # Last resort: psutil SIGKILL (handles manually-started Ollama not managed by launchd)
+        proc = _find_ollama_process()
+        if proc is None:
+            return not await self.health_check()
+
+        logger.warning("Ollama still running — escalating to SIGKILL", extra={"pid": proc.pid})
         try:
-            # Re-validate before SIGKILL — PID may have been reused
             if proc.is_running() and _is_ollama_process(proc):
                 proc.kill()
                 await asyncio.sleep(2)
@@ -255,6 +251,33 @@ class OllamaProvider(LLMProvider):
 
 
 # ── Module-level process helpers (no shell, no injection surface) ─────────────
+
+# ── Platform service manager shims ───────────────────────────────────────────
+
+def _svcmgr_start() -> bool:
+    """Start Ollama via the platform service manager. Returns True on success."""
+    if sys.platform == "darwin":
+        try:
+            from svcmgr.macos import start_service
+            return start_service()
+        except Exception as exc:
+            logger.warning("svcmgr.start_service unavailable", extra={"error": str(exc)})
+    # Linux/Windows: no svcmgr wired yet — log and let health-check loop handle it
+    logger.info("no svcmgr for this platform — assuming Ollama will start externally")
+    return True
+
+
+def _svcmgr_stop() -> bool:
+    """Stop Ollama via the platform service manager. Returns True on success."""
+    if sys.platform == "darwin":
+        try:
+            from svcmgr.macos import stop_service
+            return stop_service()
+        except Exception as exc:
+            logger.warning("svcmgr.stop_service unavailable", extra={"error": str(exc)})
+    logger.info("no svcmgr for this platform — relying on psutil fallback")
+    return False
+
 
 def _find_ollama_process() -> psutil.Process | None:
     """
