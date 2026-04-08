@@ -210,6 +210,7 @@
   <div class="provider-row">
     <div class="provider-stat">Loaded: <span id="pv-model">—</span></div>
     <div class="provider-stat">Memory: <span id="pv-mem">—</span></div>
+    <div class="provider-stat">Context: <span id="pv-ctx">—</span></div>
   </div>
   <div class="model-select-row">
     <select id="model-select">
@@ -313,6 +314,7 @@
 const API = "";  // same-origin
 let _thresholds = { ram_pause_pct: 85, cpu_pause_pct: 90, gpu_vram_pause_pct: 85 };
 let _polling = null;
+let _modelMeta = {};   // name → { size_mb, context_length }
 
 // ── API key management ────────────────────────────────────────────────────────
 
@@ -455,8 +457,17 @@ function setBar(id, pct, threshold) {
 function renderProvider(p) {
   const modelEl = document.getElementById("pv-model");
   const memEl   = document.getElementById("pv-mem");
+  const ctxEl   = document.getElementById("pv-ctx");
   modelEl.textContent = p.model_loaded ? (p.model_name || "unknown") : "none";
   memEl.textContent   = p.memory_used_mb ? p.memory_used_mb + " MB" : "—";
+
+  // Context length from cached model metadata
+  if (p.model_loaded && p.model_name && _modelMeta[p.model_name]) {
+    const ctx = _modelMeta[p.model_name].context_length;
+    ctxEl.textContent = ctx ? _fmtCtx(ctx) : "—";
+  } else {
+    ctxEl.textContent = "—";
+  }
 
   // Highlight the currently loaded model in the dropdown
   const sel = document.getElementById("model-select");
@@ -467,6 +478,12 @@ function renderProvider(p) {
   }
 }
 
+function _fmtCtx(n) {
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + "M ctx";
+  if (n >= 1000)    return Math.round(n / 1000) + "K ctx";
+  return n + " ctx";
+}
+
 async function loadModels() {
   try {
     const r = await apiFetch("/models");
@@ -474,13 +491,16 @@ async function loadModels() {
     const data = await r.json();
     const sel = document.getElementById("model-select");
     const prev = sel.value;
-    // Keep placeholder, replace the rest
     while (sel.options.length > 1) sel.remove(1);
+    _modelMeta = {};
     for (const m of (data.models || [])) {
+      _modelMeta[m.name] = { size_mb: m.size_mb, context_length: m.context_length };
       const opt = document.createElement("option");
       opt.value = m.name;
-      const mb = m.size_mb ? " (" + m.size_mb + " MB)" : "";
-      opt.textContent = m.name + mb;
+      const mb  = m.size_mb ? m.size_mb + " MB" : "";
+      const ctx = m.context_length ? _fmtCtx(m.context_length) : "";
+      const meta = [mb, ctx].filter(Boolean).join(" · ");
+      opt.textContent = m.name + (meta ? "  (" + meta + ")" : "");
       sel.appendChild(opt);
     }
     if (prev) sel.value = prev;
