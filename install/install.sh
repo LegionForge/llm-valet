@@ -38,6 +38,30 @@ for cmd in python3 python; do
   fi
 done
 
+if [[ -z "$PYTHON" ]] && [[ "$(uname)" == "Darwin" ]]; then
+  # Homebrew installs Python into a prefix that is not on the PATH in
+  # non-interactive shells (curl-pipe installs, launchd, SSH without a
+  # login shell).  Source the Homebrew environment and retry.
+  BREW_SHELLENV=""
+  for brew_bin in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+    if [[ -x "$brew_bin" ]]; then
+      BREW_SHELLENV="$("$brew_bin" shellenv)"
+      break
+    fi
+  done
+  if [[ -n "$BREW_SHELLENV" ]]; then
+    eval "$BREW_SHELLENV"
+    for cmd in python3 python; do
+      if command -v "$cmd" &>/dev/null; then
+        if "$cmd" -c "import sys; sys.exit(0 if sys.version_info >= ($MIN_PYTHON_MAJOR, $MIN_PYTHON_MINOR) else 1)" 2>/dev/null; then
+          PYTHON="$cmd"
+          break
+        fi
+      fi
+    done
+  fi
+fi
+
 if [[ -z "$PYTHON" ]]; then
   die "Python $MIN_PYTHON_MAJOR.$MIN_PYTHON_MINOR or newer is required.\n  macOS: brew install python\n  Ubuntu/Debian: sudo apt install python3\n  Download: https://python.org"
 fi
