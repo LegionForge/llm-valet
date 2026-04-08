@@ -77,7 +77,8 @@ if ! $PURGE; then
   echo "  Your settings and logs are stored in: $INSTALL_DIR"
   echo ""
   read -r -p "  Remove settings and logs too? [y/N] " response
-  [[ "${response,,}" == "y" || "${response,,}" == "yes" ]] && PURGE=true
+  response_lower=$(echo "$response" | tr '[:upper:]' '[:lower:]')
+  [[ "$response_lower" == "y" || "$response_lower" == "yes" ]] && PURGE=true
   echo ""
 fi
 
