@@ -30,14 +30,31 @@ def _check_not_root() -> None:
         sys.exit("llm-valet must not run as root — exiting")
 
 
+class _JsonFormatter(logging.Formatter):
+    """JSON log formatter that captures extra={} fields into the output."""
+
+    _SKIP = frozenset(logging.LogRecord("", 0, "", 0, "", (), None).__dict__)
+
+    def format(self, record: logging.LogRecord) -> str:
+        import json
+
+        out: dict[str, object] = {
+            "time": self.formatTime(record, self.datefmt),
+            "level": record.levelname,
+            "logger": record.name,
+            "msg": record.getMessage(),
+        }
+        for key, val in record.__dict__.items():
+            if key not in self._SKIP and not key.startswith("_"):
+                out[key] = val
+        return json.dumps(out)
+
+
 def _configure_logging(settings: Settings) -> None:
     log_path = Path(settings.log_file).expanduser()
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
-    json_formatter = logging.Formatter(
-        '{"time": "%(asctime)s", "level": "%(levelname)s",'
-        ' "logger": "%(name)s", "msg": "%(message)s"}'
-    )
+    json_formatter = _JsonFormatter()
 
     file_handler = logging.handlers.RotatingFileHandler(
         log_path, maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8"
@@ -76,6 +93,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.info("llm-valet starting", extra={"host": settings.host, "port": settings.port})
+        # Warn if the default ram_pause_pct may be too low for the configured model.
+        # Apple Silicon unified memory means a 7B model can use 5-8 GB; on a 16 GB
+        # machine that's already 30-50% of RAM before the threshold is reached.
+        if settings.thresholds.ram_pause_pct >= 85.0:
+            logger.warning(
+                "ram_pause_pct is at default (85%%) — consider lowering it to match "
+                "your model size. A 7B model on 16 GB uses ~50%% RAM; 85%% leaves "
+                "little headroom before the watchdog pauses.",
+                extra={"ram_pause_pct": settings.thresholds.ram_pause_pct},
+            )
         watchdog_task = asyncio.create_task(watchdog.run(), name="watchdog")
         try:
             yield

@@ -14,6 +14,12 @@ llm-valet watches your machine in real time. When a game launches, or RAM/CPU/GP
 
 A Mac Mini M4 doubles as both a persistent LLM server and a gaming machine. The valet detects when gaming is happening (or resources are scarce) and gracefully unloads the model and optionally the LLM service, then reloads when resources free up.
 
+### Game Detection — Steam Background Helpers
+
+llm-valet detects active gaming by checking for processes whose executable path contains `steamapps/common`. This catches any game launched via Steam, including helper processes that many games (and Steam itself) keep running as background services.
+
+**What this means in practice:** If you have Steam open, even without actively playing a game, Steam's helper processes may be detected and hold the watchdog in the paused state. This is by design — Steam helpers compete for the same resources as LLM inference. If you want the valet to stay active while Steam is open in the background, close Steam entirely or use manual `/resume` to override.
+
 ---
 
 ## Why This Exists
