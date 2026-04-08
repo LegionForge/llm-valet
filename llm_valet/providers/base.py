@@ -10,6 +10,12 @@ class ProviderStatus:
     memory_used_mb: int | None
 
 
+@dataclass
+class ModelInfo:
+    name: str
+    size_mb: int
+
+
 class LLMProvider(ABC):
     @abstractmethod
     async def start(self) -> bool: ...
@@ -28,3 +34,9 @@ class LLMProvider(ABC):
 
     @abstractmethod
     async def health_check(self) -> bool: ...
+
+    @abstractmethod
+    async def list_models(self) -> list[ModelInfo]: ...
+
+    @abstractmethod
+    async def load_model(self, model_name: str) -> bool: ...
