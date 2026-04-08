@@ -110,23 +110,25 @@ class ThresholdEngine:
         """
         Returns (should_pause, reason).
 
-        - RAM: pause immediately when used_pct >= ram_pause_pct OR
-               pressure == CRITICAL.
+        - RAM: pause when used_pct >= ram_pause_pct.
         - CPU: caller enforces the sustained window; this returns True whenever
                cpu exceeds the threshold so the caller can count ticks.
         - GPU VRAM: pause immediately when vram_used_pct >= gpu_vram_pause_pct.
         - Resume: returns False only when ALL metrics are below their resume thresholds.
           The resume check is separated into evaluate_resume() so callers can
           apply the grace-period window independently.
+
+        NOTE — memory_pressure level is intentionally NOT used as an independent
+        pause trigger. On Apple Silicon, loading a large model into unified memory
+        routinely produces transient CRITICAL pressure readings even when RAM% is
+        within the user's configured threshold. Using CRITICAL as an override
+        defeats the purpose of ram_pause_pct configuration. Pressure level is
+        still reported in /metrics for informational purposes.
         """
         t = self._t
         mem = metrics.memory
         cpu = metrics.cpu
         gpu = metrics.gpu
-
-        # Memory pressure — OS-level signal takes priority on macOS
-        if mem.pressure == PressureLevel.CRITICAL:
-            return True, "memory pressure level CRITICAL"
 
         if mem.used_pct >= t.ram_pause_pct:
             return True, f"RAM {mem.used_pct:.1f}% >= {t.ram_pause_pct}% threshold"
@@ -155,9 +157,6 @@ class ThresholdEngine:
         mem = metrics.memory
         cpu = metrics.cpu
         gpu = metrics.gpu
-
-        if mem.pressure == PressureLevel.CRITICAL:
-            return False, "memory pressure level still CRITICAL"
 
         if mem.used_pct >= t.ram_resume_pct:
             return False, f"RAM {mem.used_pct:.1f}% >= resume threshold {t.ram_resume_pct}%"
