@@ -14,6 +14,7 @@ class ProviderStatus:
 class ModelInfo:
     name: str
     size_mb: int
+    context_length: int | None
 
 
 class LLMProvider(ABC):

@@ -82,10 +82,13 @@ class OllamaProvider(LLMProvider):
             return False
 
         try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
+            # stream=False ensures Ollama sends a single complete response rather
+            # than a chunked stream — required for keep_alive to be committed before
+            # the connection closes.  Longer timeout for slow storage.
+            async with httpx.AsyncClient(timeout=60.0) as client:
                 resp = await client.post(
                     f"{self._base_url}/api/generate",
-                    json={"model": model, "keep_alive": -1},
+                    json={"model": model, "keep_alive": -1, "stream": False},
                 )
                 resp.raise_for_status()
                 logger.info("model pre-warmed", extra={"model": model})
@@ -209,23 +212,42 @@ class OllamaProvider(LLMProvider):
             return False
 
     async def list_models(self) -> list[ModelInfo]:
-        """Return all locally available models from /api/tags."""
+        """Return all locally available models with context_length from /api/tags + /api/show."""
         try:
             async with httpx.AsyncClient(timeout=self._timeout) as client:
                 resp = await client.get(f"{self._base_url}/api/tags")
                 resp.raise_for_status()
-                models: list[dict[str, Any]] = resp.json().get("models", [])
-            return [
-                ModelInfo(
-                    name=str(m.get("name", "")),
-                    size_mb=(int(m.get("size") or 0)) // (1024 * 1024),
-                )
-                for m in models
-                if m.get("name")
-            ]
+                raw_models: list[dict[str, Any]] = resp.json().get("models", [])
+
+            results: list[ModelInfo] = []
+            for m in raw_models:
+                name = str(m.get("name", ""))
+                if not name:
+                    continue
+                size_mb = (int(m.get("size") or 0)) // (1024 * 1024)
+                ctx = await self._fetch_context_length(name)
+                results.append(ModelInfo(name=name, size_mb=size_mb, context_length=ctx))
+            return results
         except httpx.HTTPError as exc:
             logger.error("list_models request failed", extra={"error": str(exc)})
             return []
+
+    async def _fetch_context_length(self, model_name: str) -> int | None:
+        """Call /api/show and extract context_length from model_info."""
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                resp = await client.post(
+                    f"{self._base_url}/api/show",
+                    json={"name": model_name},
+                )
+                resp.raise_for_status()
+                model_info: dict[str, Any] = resp.json().get("model_info") or {}
+                for key, val in model_info.items():
+                    if key.endswith(".context_length") and isinstance(val, int):
+                        return val
+        except httpx.HTTPError:
+            pass
+        return None
 
     async def load_model(self, model_name: str) -> bool:
         """
@@ -246,18 +268,19 @@ class OllamaProvider(LLMProvider):
                 async with httpx.AsyncClient(timeout=self._timeout) as client:
                     resp = await client.post(
                         f"{self._base_url}/api/generate",
-                        json={"model": current, "keep_alive": 0},
+                        json={"model": current, "keep_alive": 0, "stream": False},
                     )
                     resp.raise_for_status()
             except httpx.HTTPError as exc:
                 logger.warning("load_model: unload current failed", extra={"error": str(exc)})
 
-        # Pre-warm the new model
+        # Pre-warm the new model.  stream=False ensures keep_alive is committed before
+        # the connection closes.  60s timeout for slow storage.
         try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
+            async with httpx.AsyncClient(timeout=60.0) as client:
                 resp = await client.post(
                     f"{self._base_url}/api/generate",
-                    json={"model": model_name, "keep_alive": -1},
+                    json={"model": model_name, "keep_alive": -1, "stream": False},
                 )
                 resp.raise_for_status()
             self._model_name = model_name
