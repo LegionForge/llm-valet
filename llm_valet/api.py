@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from llm_valet.config import Settings, load_settings
-from llm_valet.providers.base import LLMProvider, ProviderStatus
+from llm_valet.providers.base import LLMProvider, ModelInfo, ProviderStatus
 from llm_valet.providers.ollama import OllamaProvider
 from llm_valet.resources.base import ResourceCollector, SystemMetrics
 from llm_valet.watchdog import Watchdog
@@ -205,6 +205,32 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if success:
             w.notify_manual_resume()
         return {"ok": success, "action": "resume"}
+
+    @app.get("/models")
+    async def get_models(
+        _: Auth,
+        p: Annotated[LLMProvider, Depends(get_provider)],
+    ) -> dict[str, Any]:
+        """List all locally available models."""
+        models: list[ModelInfo] = await p.list_models()
+        return {"models": [m.__dict__ for m in models]}
+
+    @app.post("/load")
+    async def post_load(
+        _: Auth,
+        p: Annotated[LLMProvider, Depends(get_provider)],
+        w: Annotated[Watchdog, Depends(get_watchdog)],
+        request: Request,
+    ) -> dict[str, Any]:
+        """Load a specific model — unloads current model first if different."""
+        body = await request.json()
+        model_name = body.get("model", "")
+        if not isinstance(model_name, str) or not model_name:
+            raise HTTPException(status_code=422, detail="model field required")
+        success = await p.load_model(model_name)
+        if success:
+            w.notify_manual_resume()
+        return {"ok": success, "action": "load", "model": model_name}
 
     @app.post("/start")
     async def post_start(

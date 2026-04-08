@@ -7,7 +7,7 @@ from typing import Any
 import httpx
 import psutil
 
-from llm_valet.providers.base import LLMProvider, ProviderStatus
+from llm_valet.providers.base import LLMProvider, ModelInfo, ProviderStatus
 
 logger = logging.getLogger(__name__)
 
@@ -206,6 +206,66 @@ class OllamaProvider(LLMProvider):
                 resp = await client.get(f"{self._base_url}/api/tags")
                 return resp.status_code == 200
         except httpx.HTTPError:
+            return False
+
+    async def list_models(self) -> list[ModelInfo]:
+        """Return all locally available models from /api/tags."""
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                resp = await client.get(f"{self._base_url}/api/tags")
+                resp.raise_for_status()
+                models: list[dict[str, Any]] = resp.json().get("models", [])
+            return [
+                ModelInfo(
+                    name=str(m.get("name", "")),
+                    size_mb=(int(m.get("size") or 0)) // (1024 * 1024),
+                )
+                for m in models
+                if m.get("name")
+            ]
+        except httpx.HTTPError as exc:
+            logger.error("list_models request failed", extra={"error": str(exc)})
+            return []
+
+    async def load_model(self, model_name: str) -> bool:
+        """
+        Switch to a different model:
+          1. Validate name against allowlist regex.
+          2. Unload the currently loaded model (if any) via keep_alive=0.
+          3. Pre-warm the new model via keep_alive=-1.
+          4. Update _model_name so future pause/resume use the new model.
+        """
+        if not _MODEL_NAME_RE.match(model_name):
+            logger.error("load_model rejected — invalid model name", extra={"model": model_name})
+            return False
+
+        # Unload current model first (ignore failure — it may not be loaded)
+        current = await self._resolve_model()
+        if current and current != model_name:
+            try:
+                async with httpx.AsyncClient(timeout=self._timeout) as client:
+                    resp = await client.post(
+                        f"{self._base_url}/api/generate",
+                        json={"model": current, "keep_alive": 0},
+                    )
+                    resp.raise_for_status()
+            except httpx.HTTPError as exc:
+                logger.warning("load_model: unload current failed", extra={"error": str(exc)})
+
+        # Pre-warm the new model
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                resp = await client.post(
+                    f"{self._base_url}/api/generate",
+                    json={"model": model_name, "keep_alive": -1},
+                )
+                resp.raise_for_status()
+            self._model_name = model_name
+            self._last_loaded_model = model_name
+            logger.info("model loaded", extra={"model": model_name})
+            return True
+        except httpx.HTTPError as exc:
+            logger.error("load_model: pre-warm failed", extra={"error": str(exc)})
             return False
 
     # ── Internal helpers ──────────────────────────────────────────────────────

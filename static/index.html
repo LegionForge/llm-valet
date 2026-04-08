@@ -155,6 +155,23 @@
   }
   #key-input:focus { outline: none; border-color: var(--accent); }
 
+  /* Provider section */
+  .provider-row { display: flex; align-items: baseline; gap: 12px; margin-bottom: 6px; }
+  .provider-stat { font-size: 12px; color: var(--dim); }
+  .provider-stat span { color: var(--text); }
+  .model-select-row { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+  select {
+    flex: 1;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 6px 10px;
+    border-radius: 3px;
+    font-family: inherit;
+    font-size: 12px;
+  }
+  select:focus { outline: none; border-color: var(--accent); }
+
   /* Separator */
   hr { border: none; border-top: 1px solid var(--border); margin: 4px 0 20px; }
 </style>
@@ -183,6 +200,24 @@
     <span class="model-name" id="model-name"></span>
   </div>
   <div class="last-action" id="last-action"></div>
+</section>
+
+<hr>
+
+<!-- Provider -->
+<section>
+  <div class="section-title">Provider</div>
+  <div class="provider-row">
+    <div class="provider-stat">Loaded: <span id="pv-model">—</span></div>
+    <div class="provider-stat">Memory: <span id="pv-mem">—</span></div>
+  </div>
+  <div class="model-select-row">
+    <select id="model-select">
+      <option value="">— select model —</option>
+    </select>
+    <button id="btn-load" onclick="loadModel()">LOAD</button>
+  </div>
+  <div class="last-action" id="load-status"></div>
 </section>
 
 <hr>
@@ -334,6 +369,7 @@ async function apiFetch(path, options) {
 
 async function boot() {
   await loadConfig();
+  await loadModels();
   await poll();
   _polling = setInterval(poll, 5000);
 }
@@ -347,6 +383,7 @@ async function poll() {
     const data = await r.json();
     hideError();
     renderState(data.provider);
+    renderProvider(data.provider);
     renderMetrics(data.metrics);
   } catch (e) {
     if (!e.message.includes("401")) showError("Cannot reach llm-valet API — " + e.message);
@@ -411,6 +448,67 @@ function setBar(id, pct, threshold) {
   }
 
   if (marker) marker.style.left = threshold + "%";
+}
+
+// ── Provider section ──────────────────────────────────────────────────────────
+
+function renderProvider(p) {
+  const modelEl = document.getElementById("pv-model");
+  const memEl   = document.getElementById("pv-mem");
+  modelEl.textContent = p.model_loaded ? (p.model_name || "unknown") : "none";
+  memEl.textContent   = p.memory_used_mb ? p.memory_used_mb + " MB" : "—";
+
+  // Highlight the currently loaded model in the dropdown
+  const sel = document.getElementById("model-select");
+  if (p.model_loaded && p.model_name) {
+    for (const opt of sel.options) {
+      if (opt.value === p.model_name) { sel.value = p.model_name; break; }
+    }
+  }
+}
+
+async function loadModels() {
+  try {
+    const r = await apiFetch("/models");
+    if (!r.ok) return;
+    const data = await r.json();
+    const sel = document.getElementById("model-select");
+    const prev = sel.value;
+    // Keep placeholder, replace the rest
+    while (sel.options.length > 1) sel.remove(1);
+    for (const m of (data.models || [])) {
+      const opt = document.createElement("option");
+      opt.value = m.name;
+      const mb = m.size_mb ? " (" + m.size_mb + " MB)" : "";
+      opt.textContent = m.name + mb;
+      sel.appendChild(opt);
+    }
+    if (prev) sel.value = prev;
+  } catch (_) { /* non-fatal */ }
+}
+
+async function loadModel() {
+  const sel = document.getElementById("model-select");
+  const name = sel.value;
+  if (!name) return;
+  const btn = document.getElementById("btn-load");
+  const statusEl = document.getElementById("load-status");
+  btn.disabled = true;
+  statusEl.textContent = "Loading " + name + "...";
+  try {
+    const r = await apiFetch("/load", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: name }),
+    });
+    const data = await r.json();
+    statusEl.textContent = data.ok ? name + " loaded" : "load failed";
+    await poll();
+  } catch (e) {
+    statusEl.textContent = "error: " + e.message;
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 // ── Actions ───────────────────────────────────────────────────────────────────
