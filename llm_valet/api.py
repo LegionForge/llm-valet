@@ -186,18 +186,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def post_pause(
         _: Auth,
         p: Annotated[LLMProvider, Depends(get_provider)],
+        w: Annotated[Watchdog, Depends(get_watchdog)],
     ) -> dict[str, Any]:
         """Manual pause — unload model from memory."""
         success = await p.pause()
+        if success:
+            w.notify_manual_pause()
         return {"ok": success, "action": "pause"}
 
     @app.post("/resume")
     async def post_resume(
         _: Auth,
         p: Annotated[LLMProvider, Depends(get_provider)],
+        w: Annotated[Watchdog, Depends(get_watchdog)],
     ) -> dict[str, Any]:
         """Manual resume — pre-warm model into memory."""
         success = await p.resume()
+        if success:
+            w.notify_manual_resume()
         return {"ok": success, "action": "resume"}
 
     @app.post("/start")

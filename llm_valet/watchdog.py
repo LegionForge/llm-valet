@@ -68,6 +68,24 @@ class Watchdog:
         self._running = False
         logger.info("watchdog stopped")
 
+    def notify_manual_pause(self) -> None:
+        """
+        Called by the API after a successful manual /pause.
+        Syncs watchdog state so the auto-resume grace period starts from now.
+        """
+        self._state = WatchdogState.PAUSED
+        self._paused_at = time.monotonic()
+        logger.info("watchdog state synced — manual pause")
+
+    def notify_manual_resume(self) -> None:
+        """
+        Called by the API after a successful manual /resume.
+        Bypasses evaluate_resume() — the model is already loaded, no room-check needed.
+        """
+        self._state = WatchdogState.RUNNING
+        self._paused_at = None
+        logger.info("watchdog state synced — manual resume")
+
     # ── Tick ──────────────────────────────────────────────────────────────────
 
     async def _tick(self) -> None:
