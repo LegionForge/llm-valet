@@ -12,7 +12,6 @@ import psutil
 
 from llm_valet.resources.base import (
     CPUMetrics,
-    DiskMetrics,
     GPUMetrics,
     MemoryMetrics,
     PressureLevel,
