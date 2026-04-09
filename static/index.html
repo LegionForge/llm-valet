@@ -103,6 +103,7 @@
   }
   .badge.running  { color: var(--green);  }
   .badge.paused   { color: var(--yellow); }
+  .badge.idle     { color: var(--dim);    }
   .badge.stopped  { color: var(--red);    }
   .model-name { font-size: 12px; color: var(--dim); }
 
@@ -308,6 +309,8 @@
 <div class="header-row">
   <h1>llm-valet</h1>
   <div class="header-actions">
+    <span id="version-badge" style="font-size:10px;color:var(--dim);align-self:center;letter-spacing:0.04em"></span>
+    <button class="icon-btn" title="Refresh" onclick="poll()">↺</button>
     <button class="icon-btn" id="theme-btn" title="Toggle light/dark mode" onclick="toggleTheme()">◑</button>
     <a href="https://github.com/LegionForge/llm-valet#readme" target="_blank" rel="noopener">
       <button class="icon-btn" title="Help / README">?</button>
@@ -495,6 +498,8 @@ let _thresholds = { ram_pause_pct: 85, cpu_pause_pct: 90, gpu_vram_pause_pct: 85
 let _polling = null;
 let _modelMeta = {};   // name → { size_mb, context_length }
 let _refreshMs = 5000;
+let _lastProvider = null;   // last known provider state from poll
+let _lastWatchdog = null;   // last known watchdog state from poll
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
 
@@ -601,9 +606,15 @@ async function poll() {
     if (!r.ok) throw new Error("HTTP " + r.status);
     const data = await r.json();
     hideError();
+    _lastProvider = data.provider;
+    _lastWatchdog = data.watchdog;
     renderState(data.provider, data.watchdog);
     renderProvider(data.provider);
     renderMetrics(data.metrics);
+    renderControls(data.provider, data.watchdog);
+    if (data.version) {
+      document.getElementById("version-badge").textContent = "v" + data.version;
+    }
   } catch (e) {
     if (!e.message.includes("401")) showError("Cannot reach llm-valet API — " + e.message);
   }
@@ -619,17 +630,18 @@ function renderState(p, w) {
   let label, cls;
   if (!p.running) {
     label = "STOPPED"; cls = "stopped";
-  } else if (!p.model_loaded) {
-    label = "PAUSED"; cls = "paused";
-  } else {
+  } else if (p.model_loaded) {
     label = "RUNNING"; cls = "running";
+  } else if (w && w.state === "paused") {
+    label = "PAUSED"; cls = "paused";   // watchdog explicitly paused
+  } else {
+    label = "IDLE"; cls = "idle";       // service up, no model, watchdog not paused
   }
 
   badge.textContent = label;
   badge.className = "badge " + cls;
   modelEl.textContent = p.model_name ? p.model_name : "";
 
-  // Show watchdog last_reason if present and not a manual action
   if (w && w.last_reason) {
     lastEl.textContent = w.last_reason;
   }
@@ -875,7 +887,8 @@ async function action(name) {
   } catch (e) {
     lastEl.textContent = name.toUpperCase() + " — error: " + e.message;
   } finally {
-    setButtonsDisabled(false);
+    // Re-enable buttons based on last known state; fallback to all-on if unknown
+    renderControls(_lastProvider, _lastWatchdog);
   }
 }
 
@@ -884,6 +897,34 @@ function setButtonsDisabled(disabled) {
     const el = document.getElementById("btn-" + id);
     if (el) el.disabled = disabled;
   });
+}
+
+function renderControls(p, w) {
+  // If state is unknown (startup / error), re-enable everything
+  if (!p) { setButtonsDisabled(false); return; }
+
+  const running = p.running;
+  const loaded  = p.model_loaded;
+  const wState  = w ? w.state : "running";
+
+  // PAUSE: only useful when a model is loaded
+  const pauseEl = document.getElementById("btn-pause");
+  if (pauseEl) pauseEl.disabled = !running || !loaded;
+
+  // RESUME: only useful when watchdog is paused (restores model)
+  const resumeEl = document.getElementById("btn-resume");
+  if (resumeEl) resumeEl.disabled = !running || wState !== "paused";
+
+  // START: only when service is down
+  const startEl = document.getElementById("btn-start");
+  if (startEl) startEl.disabled = running;
+
+  // STOP / RESTART: only when service is up
+  const stopEl = document.getElementById("btn-stop");
+  if (stopEl) stopEl.disabled = !running;
+
+  const restartEl = document.getElementById("btn-restart");
+  if (restartEl) restartEl.disabled = !running;
 }
 
 // ── Config ────────────────────────────────────────────────────────────────────
