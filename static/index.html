@@ -431,11 +431,16 @@
 <section>
   <div class="section-title">Controls</div>
   <div class="btn-row">
-    <button id="btn-pause"   onclick="action('pause')">PAUSE</button>
-    <button id="btn-resume"  onclick="action('resume')">RESUME</button>
-    <button id="btn-start"   onclick="action('start')">START</button>
-    <button id="btn-stop"    class="danger" onclick="action('stop')">STOP</button>
-    <button id="btn-restart" onclick="action('restart')">RESTART</button>
+    <button id="btn-pause"   onclick="action('pause')"
+            title="Unload model from memory. LLM Provider stays running. Use RESUME to reload.">PAUSE</button>
+    <button id="btn-resume"  onclick="action('resume')"
+            title="Reload the last model into memory.">RESUME</button>
+    <button id="btn-start"   onclick="action('start')"
+            title="Start the LLM Provider service. No model is loaded automatically — use LOAD or RESUME after.">START SVC</button>
+    <button id="btn-stop"    class="danger" onclick="action('stop')"
+            title="Unload model, then shut down the LLM Provider service.">STOP</button>
+    <button id="btn-restart" onclick="action('restart')"
+            title="Restart the LLM Provider service. Does not reload model — use LOAD or RESUME after.">RESTART</button>
   </div>
 </section>
 
