@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>llm-valet</title>
+<style>
+  :root {
+    --bg:       #0e0e0e;
+    --surface:  #1a1a1a;
+    --border:   #2e2e2e;
+    --text:     #d4d4d4;
+    --dim:      #6a6a6a;
+    --accent:   #4e9aff;
+    --green:    #4ec94e;
+    --yellow:   #e6c440;
+    --red:      #e05252;
+    --bar-bg:   #2a2a2a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Cascadia Code", "Fira Mono", "Consolas", monospace;
+    font-size: 13px;
+    padding: 24px;
+    max-width: 720px;
+    margin: 0 auto;
+  }
+  h1 { font-size: 18px; letter-spacing: 0.08em; color: var(--accent); margin-bottom: 4px; }
+  .subtitle { color: var(--dim); font-size: 11px; margin-bottom: 28px; }
+
+  /* State badge */
+  .badge {
+    display: inline-block;
+    padding: 4px 14px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-weight: bold;
+    letter-spacing: 0.1em;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--dim);
+  }
+  .badge.running  { border-color: var(--green);  color: var(--green); }
+  .badge.paused   { border-color: var(--yellow); color: var(--yellow); }
+  .badge.stopped  { border-color: var(--red);    color: var(--red); }
+
+  /* Sections */
+  section { margin-bottom: 28px; }
+  .section-title { font-size: 11px; color: var(--dim); text-transform: uppercase;
+                   letter-spacing: 0.12em; margin-bottom: 12px; }
+
+  /* Status row */
+  .status-row { display: flex; align-items: center; gap: 16px; margin-bottom: 8px; }
+  .model-name { color: var(--dim); font-size: 12px; }
+  .last-action { color: var(--dim); font-size: 11px; margin-top: 6px; min-height: 16px; }
+
+  /* Resource bars */
+  .metric { margin-bottom: 14px; }
+  .metric-label {
+    display: flex; justify-content: space-between;
+    font-size: 11px; color: var(--dim); margin-bottom: 4px;
+  }
+  .metric-label .value { color: var(--text); }
+  .bar-track {
+    position: relative;
+    height: 8px;
+    background: var(--bar-bg);
+    border-radius: 2px;
+    overflow: visible;
+  }
+  .bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.4s ease, background 0.4s ease;
+    background: var(--accent);
+  }
+  .bar-fill.warn     { background: var(--yellow); }
+  .bar-fill.critical { background: var(--red); }
+  .threshold-marker {
+    position: absolute;
+    top: -3px;
+    width: 2px;
+    height: 14px;
+    background: var(--red);
+    opacity: 0.7;
+    border-radius: 1px;
+  }
+
+  /* Buttons */
+  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  button {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 7px 18px;
+    border-radius: 3px;
+    font-family: inherit;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  button:active { opacity: 0.7; }
+  button:disabled { opacity: 0.35; cursor: not-allowed; }
+  button.danger:hover { border-color: var(--red); color: var(--red); }
+
+  /* Sliders */
+  .slider-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 24px; }
+  .slider-item label {
+    display: flex; justify-content: space-between;
+    font-size: 11px; color: var(--dim); margin-bottom: 5px;
+  }
+  .slider-item label span { color: var(--text); }
+  input[type=range] {
+    width: 100%;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+
+  /* Error banner */
+  #error-banner {
+    display: none;
+    background: #2a1a1a;
+    border: 1px solid var(--red);
+    color: var(--red);
+    font-size: 11px;
+    padding: 8px 12px;
+    border-radius: 3px;
+    margin-bottom: 16px;
+  }
+
+  /* API key prompt */
+  #key-prompt {
+    display: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 14px;
+    border-radius: 3px;
+    margin-bottom: 16px;
+  }
+  #key-prompt .section-title { margin-bottom: 8px; }
+  #key-prompt .key-row { display: flex; gap: 8px; align-items: center; }
+  #key-input {
+    flex: 1;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 6px 10px;
+    border-radius: 3px;
+    font-family: inherit;
+    font-size: 12px;
+  }
+  #key-input:focus { outline: none; border-color: var(--accent); }
+
+  /* Provider section */
+  .provider-row { display: flex; align-items: baseline; gap: 12px; margin-bottom: 6px; }
+  .provider-stat { font-size: 12px; color: var(--dim); }
+  .provider-stat span { color: var(--text); }
+  .model-select-row { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+  select {
+    flex: 1;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 6px 10px;
+    border-radius: 3px;
+    font-family: inherit;
+    font-size: 12px;
+  }
+  select:focus { outline: none; border-color: var(--accent); }
+
+  /* Separator */
+  hr { border: none; border-top: 1px solid var(--border); margin: 4px 0 20px; }
+</style>
+</head>
+<body>
+
+<h1>llm-valet</h1>
+<p class="subtitle">LLM lifecycle manager</p>
+
+<div id="error-banner"></div>
+
+<!-- API key prompt (shown on 401) -->
+<div id="key-prompt">
+  <div class="section-title">API Key Required</div>
+  <div class="key-row">
+    <input type="password" id="key-input" placeholder="Enter X-API-Key" autocomplete="off">
+    <button onclick="submitKey()">CONNECT</button>
+  </div>
+</div>
+
+<!-- State -->
+<section>
+  <div class="section-title">State</div>
+  <div class="status-row">
+    <span class="badge" id="state-badge">--</span>
+    <span class="model-name" id="model-name"></span>
+  </div>
+  <div class="last-action" id="last-action"></div>
+</section>
+
+<hr>
+
+<!-- Provider -->
+<section>
+  <div class="section-title">Provider</div>
+  <div class="provider-row">
+    <div class="provider-stat">Loaded: <span id="pv-model">—</span></div>
+    <div class="provider-stat">Memory: <span id="pv-mem">—</span></div>
+    <div class="provider-stat">Context: <span id="pv-ctx">—</span></div>
+  </div>
+  <div class="model-select-row">
+    <select id="model-select">
+      <option value="">— select model —</option>
+    </select>
+    <button id="btn-load" onclick="loadModel()">LOAD</button>
+  </div>
+  <div class="last-action" id="load-status"></div>
+</section>
+
+<hr>
+
+<!-- Resources -->
+<section id="resources-section">
+  <div class="section-title">Resources</div>
+
+  <div class="metric" id="ram-metric">
+    <div class="metric-label">
+      <span>RAM</span>
+      <span class="value" id="ram-value">-- %</span>
+    </div>
+    <div class="bar-track">
+      <div class="bar-fill" id="ram-bar" style="width:0%"></div>
+      <div class="threshold-marker" id="ram-threshold-marker" style="left:85%"></div>
+    </div>
+  </div>
+
+  <div class="metric">
+    <div class="metric-label">
+      <span>CPU</span>
+      <span class="value" id="cpu-value">-- %</span>
+    </div>
+    <div class="bar-track">
+      <div class="bar-fill" id="cpu-bar" style="width:0%"></div>
+      <div class="threshold-marker" id="cpu-threshold-marker" style="left:90%"></div>
+    </div>
+  </div>
+
+  <div class="metric" id="gpu-metric" style="display:none">
+    <div class="metric-label">
+      <span>GPU VRAM</span>
+      <span class="value" id="gpu-value">-- %</span>
+    </div>
+    <div class="bar-track">
+      <div class="bar-fill" id="gpu-bar" style="width:0%"></div>
+      <div class="threshold-marker" id="gpu-threshold-marker" style="left:85%"></div>
+    </div>
+  </div>
+</section>
+
+<hr>
+
+<!-- Controls -->
+<section>
+  <div class="section-title">Controls</div>
+  <div class="btn-row">
+    <button id="btn-pause"  onclick="action('pause')">PAUSE</button>
+    <button id="btn-resume" onclick="action('resume')">RESUME</button>
+    <button id="btn-start"  onclick="action('start')">START</button>
+    <button id="btn-stop"   class="danger" onclick="action('stop')">STOP</button>
+    <button id="btn-restart" onclick="action('restart')">RESTART</button>
+  </div>
+</section>
+
+<hr>
+
+<!-- Thresholds -->
+<section>
+  <div class="section-title">Thresholds</div>
+  <div class="slider-grid">
+    <div class="slider-item">
+      <label>RAM pause <span id="lbl-ram-pause">85%</span></label>
+      <input type="range" id="sl-ram-pause" min="50" max="98" value="85"
+             oninput="updateLabel('lbl-ram-pause', this.value, '%')"
+             onchange="saveThresholds()">
+    </div>
+    <div class="slider-item">
+      <label>RAM resume <span id="lbl-ram-resume">60%</span></label>
+      <input type="range" id="sl-ram-resume" min="30" max="90" value="60"
+             oninput="updateLabel('lbl-ram-resume', this.value, '%')"
+             onchange="saveThresholds()">
+    </div>
+    <div class="slider-item">
+      <label>CPU pause <span id="lbl-cpu-pause">90%</span></label>
+      <input type="range" id="sl-cpu-pause" min="50" max="99" value="90"
+             oninput="updateLabel('lbl-cpu-pause', this.value, '%')"
+             onchange="saveThresholds()">
+    </div>
+    <div class="slider-item">
+      <label>GPU VRAM pause <span id="lbl-gpu-pause">85%</span></label>
+      <input type="range" id="sl-gpu-pause" min="50" max="98" value="85"
+             oninput="updateLabel('lbl-gpu-pause', this.value, '%')"
+             onchange="saveThresholds()">
+    </div>
+  </div>
+</section>
+
+<script>
+"use strict";
+
+const API = "";  // same-origin
+let _thresholds = { ram_pause_pct: 85, cpu_pause_pct: 90, gpu_vram_pause_pct: 85 };
+let _polling = null;
+let _modelMeta = {};   // name → { size_mb, context_length }
+
+// ── API key management ────────────────────────────────────────────────────────
+
+function getKey() {
+  return sessionStorage.getItem("llm_valet_key") || "";
+}
+
+function setKey(k) {
+  if (k) sessionStorage.setItem("llm_valet_key", k);
+  else sessionStorage.removeItem("llm_valet_key");
+}
+
+function showKeyPrompt() {
+  clearInterval(_polling);
+  _polling = null;
+  document.getElementById("key-prompt").style.display = "block";
+  document.getElementById("key-input").focus();
+}
+
+function hideKeyPrompt() {
+  document.getElementById("key-prompt").style.display = "none";
+}
+
+function submitKey() {
+  const val = document.getElementById("key-input").value.trim();
+  setKey(val);
+  hideKeyPrompt();
+  hideError();
+  boot();
+}
+
+// Enter key submits the key input
+document.addEventListener("keydown", function(e) {
+  if (e.key === "Enter" && document.activeElement === document.getElementById("key-input")) {
+    submitKey();
+  }
+});
+
+// ── Fetch wrapper ─────────────────────────────────────────────────────────────
+
+async function apiFetch(path, options) {
+  const headers = Object.assign({}, (options && options.headers) || {});
+  const key = getKey();
+  if (key) headers["X-API-Key"] = key;
+  const r = await fetch(API + path, Object.assign({}, options, { headers }));
+  if (r.status === 401) {
+    showKeyPrompt();
+    throw new Error("HTTP 401 — API key required");
+  }
+  return r;
+}
+
+// ── Boot ─────────────────────────────────────────────────────────────────────
+
+async function boot() {
+  await loadConfig();
+  await loadModels();
+  await poll();
+  _polling = setInterval(poll, 5000);
+}
+
+// ── Polling ───────────────────────────────────────────────────────────────────
+
+async function poll() {
+  try {
+    const r = await apiFetch("/status");
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const data = await r.json();
+    hideError();
+    renderState(data.provider);
+    renderProvider(data.provider);
+    renderMetrics(data.metrics);
+  } catch (e) {
+    if (!e.message.includes("401")) showError("Cannot reach llm-valet API — " + e.message);
+  }
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+
+function renderState(p) {
+  const badge = document.getElementById("state-badge");
+  const modelEl = document.getElementById("model-name");
+
+  let label, cls;
+  if (!p.running) {
+    label = "STOPPED"; cls = "stopped";
+  } else if (!p.model_loaded) {
+    label = "PAUSED"; cls = "paused";
+  } else {
+    label = "RUNNING"; cls = "running";
+  }
+
+  badge.textContent = label;
+  badge.className = "badge " + cls;
+  modelEl.textContent = p.model_name ? p.model_name : "";
+}
+
+function renderMetrics(m) {
+  if (!m) return;
+
+  setBar("ram", m.memory.used_pct, _thresholds.ram_pause_pct);
+  document.getElementById("ram-value").textContent =
+    m.memory.used_pct.toFixed(1) + "% — " + m.memory.pressure;
+
+  setBar("cpu", m.cpu.used_pct, _thresholds.cpu_pause_pct);
+  document.getElementById("cpu-value").textContent = m.cpu.used_pct.toFixed(1) + "%";
+
+  if (m.gpu.available && m.gpu.vram_used_pct !== null) {
+    document.getElementById("gpu-metric").style.display = "";
+    setBar("gpu", m.gpu.vram_used_pct, _thresholds.gpu_vram_pause_pct);
+    document.getElementById("gpu-value").textContent =
+      m.gpu.vram_used_pct.toFixed(1) + "% (" +
+      (m.gpu.vram_used_mb || "?") + " / " +
+      (m.gpu.vram_total_mb || "?") + " MB)";
+  } else {
+    document.getElementById("gpu-metric").style.display = "none";
+  }
+}
+
+function setBar(id, pct, threshold) {
+  const fill = document.getElementById(id + "-bar");
+  const marker = document.getElementById(id + "-threshold-marker");
+
+  const w = Math.min(Math.max(pct, 0), 100);
+  fill.style.width = w + "%";
+
+  if (pct >= threshold) {
+    fill.className = "bar-fill critical";
+  } else if (pct >= threshold * 0.85) {
+    fill.className = "bar-fill warn";
+  } else {
+    fill.className = "bar-fill";
+  }
+
+  if (marker) marker.style.left = threshold + "%";
+}
+
+// ── Provider section ──────────────────────────────────────────────────────────
+
+function renderProvider(p) {
+  const modelEl = document.getElementById("pv-model");
+  const memEl   = document.getElementById("pv-mem");
+  const ctxEl   = document.getElementById("pv-ctx");
+  modelEl.textContent = p.model_loaded ? (p.model_name || "unknown") : "none";
+  memEl.textContent   = p.memory_used_mb ? p.memory_used_mb + " MB" : "—";
+
+  // Context length from cached model metadata
+  if (p.model_loaded && p.model_name && _modelMeta[p.model_name]) {
+    const ctx = _modelMeta[p.model_name].context_length;
+    ctxEl.textContent = ctx ? _fmtCtx(ctx) : "—";
+  } else {
+    ctxEl.textContent = "—";
+  }
+
+  // Highlight the currently loaded model in the dropdown
+  const sel = document.getElementById("model-select");
+  if (p.model_loaded && p.model_name) {
+    for (const opt of sel.options) {
+      if (opt.value === p.model_name) { sel.value = p.model_name; break; }
+    }
+  }
+}
+
+function _fmtCtx(n) {
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + "M ctx";
+  if (n >= 1000)    return Math.round(n / 1000) + "K ctx";
+  return n + " ctx";
+}
+
+async function loadModels() {
+  try {
+    const r = await apiFetch("/models");
+    if (!r.ok) return;
+    const data = await r.json();
+    const sel = document.getElementById("model-select");
+    const prev = sel.value;
+    while (sel.options.length > 1) sel.remove(1);
+    _modelMeta = {};
+    for (const m of (data.models || [])) {
+      _modelMeta[m.name] = { size_mb: m.size_mb, context_length: m.context_length };
+      const opt = document.createElement("option");
+      opt.value = m.name;
+      const mb  = m.size_mb ? m.size_mb + " MB" : "";
+      const ctx = m.context_length ? _fmtCtx(m.context_length) : "";
+      const meta = [mb, ctx].filter(Boolean).join(" · ");
+      opt.textContent = m.name + (meta ? "  (" + meta + ")" : "");
+      sel.appendChild(opt);
+    }
+    if (prev) sel.value = prev;
+  } catch (_) { /* non-fatal */ }
+}
+
+async function loadModel() {
+  const sel = document.getElementById("model-select");
+  const name = sel.value;
+  if (!name) return;
+  const btn = document.getElementById("btn-load");
+  const statusEl = document.getElementById("load-status");
+  btn.disabled = true;
+  statusEl.textContent = "Loading " + name + "...";
+  try {
+    const r = await apiFetch("/load", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: name }),
+    });
+    const data = await r.json();
+    statusEl.textContent = data.ok ? name + " loaded" : "load failed";
+    await poll();
+  } catch (e) {
+    statusEl.textContent = "error: " + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ── Actions ───────────────────────────────────────────────────────────────────
+
+async function action(name) {
+  setButtonsDisabled(true);
+  const lastEl = document.getElementById("last-action");
+  lastEl.textContent = name.toUpperCase() + "...";
+  try {
+    const r = await apiFetch("/" + name, { method: "POST" });
+    const data = await r.json();
+    lastEl.textContent = name.toUpperCase() + (data.ok ? " — ok" : " — failed");
+    await poll();
+  } catch (e) {
+    lastEl.textContent = name.toUpperCase() + " — error: " + e.message;
+  } finally {
+    setButtonsDisabled(false);
+  }
+}
+
+function setButtonsDisabled(disabled) {
+  ["pause","resume","start","stop","restart"].forEach(id => {
+    const el = document.getElementById("btn-" + id);
+    if (el) el.disabled = disabled;
+  });
+}
+
+// ── Config ────────────────────────────────────────────────────────────────────
+
+async function loadConfig() {
+  try {
+    const r = await apiFetch("/config");
+    if (!r.ok) return;
+    const cfg = await r.json();
+    _thresholds.ram_pause_pct    = cfg.ram_pause_pct    ?? 85;
+    _thresholds.cpu_pause_pct    = cfg.cpu_pause_pct    ?? 90;
+    _thresholds.gpu_vram_pause_pct = cfg.gpu_vram_pause_pct ?? 85;
+
+    setSlider("sl-ram-pause",  "lbl-ram-pause",  _thresholds.ram_pause_pct);
+    setSlider("sl-ram-resume", "lbl-ram-resume", cfg.ram_resume_pct ?? 60);
+    setSlider("sl-cpu-pause",  "lbl-cpu-pause",  _thresholds.cpu_pause_pct);
+    setSlider("sl-gpu-pause",  "lbl-gpu-pause",  _thresholds.gpu_vram_pause_pct);
+  } catch (_) { /* ignore — defaults stand */ }
+}
+
+function setSlider(sliderId, labelId, value) {
+  const el = document.getElementById(sliderId);
+  const lbl = document.getElementById(labelId);
+  if (el)  el.value = value;
+  if (lbl) lbl.textContent = value + "%";
+}
+
+async function saveThresholds() {
+  const body = {
+    ram_pause_pct:     parseFloat(document.getElementById("sl-ram-pause").value),
+    ram_resume_pct:    parseFloat(document.getElementById("sl-ram-resume").value),
+    cpu_pause_pct:     parseFloat(document.getElementById("sl-cpu-pause").value),
+    gpu_vram_pause_pct: parseFloat(document.getElementById("sl-gpu-pause").value),
+  };
+  _thresholds.ram_pause_pct     = body.ram_pause_pct;
+  _thresholds.cpu_pause_pct     = body.cpu_pause_pct;
+  _thresholds.gpu_vram_pause_pct = body.gpu_vram_pause_pct;
+
+  try {
+    await apiFetch("/config", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (_) { /* non-fatal */ }
+}
+
+function updateLabel(id, value, suffix) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = value + suffix;
+}
+
+// ── Error banner ──────────────────────────────────────────────────────────────
+
+function showError(msg) {
+  const el = document.getElementById("error-banner");
+  el.textContent = msg;   // textContent — never innerHTML
+  el.style.display = "block";
+}
+
+function hideError() {
+  document.getElementById("error-banner").style.display = "none";
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+
+boot();
+</script>
+</body>
+</html>
