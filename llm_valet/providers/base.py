@@ -8,7 +8,8 @@ class ProviderStatus:
     model_loaded: bool
     model_name: str | None
     memory_used_mb: int | None
-    size_vram_mb: int | None = None   # VRAM portion of model memory (Ollama /api/ps size_vram)
+    size_vram_mb: int | None = None           # VRAM portion of model memory (Ollama /api/ps size_vram)
+    loaded_context_length: int | None = None  # active context window (Ollama /api/ps context_length)
 
 
 @dataclass

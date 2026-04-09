@@ -125,6 +125,7 @@
     border-radius: 2px;
     height: 8px;
     overflow: visible;
+    display: flex;
   }
   .bar-fill {
     height: 100%;
@@ -134,6 +135,19 @@
   }
   .bar-fill.warn     { background: var(--yellow); }
   .bar-fill.critical { background: var(--red); }
+  /* RAM breakdown segments */
+  .bar-seg-model  { background: var(--accent);  height: 100%; transition: width 0.4s ease; }
+  .bar-seg-other  { background: var(--dim);      height: 100%; opacity: 0.5; transition: width 0.4s ease; }
+  .bar-seg-model:first-child  { border-radius: 2px 0 0 2px; }
+  .bar-seg-other:last-of-type { border-radius: 0 2px 2px 0; }
+  .bar-legend {
+    display: flex; gap: 12px; font-size: 10px; color: var(--dim);
+    margin-top: 3px;
+  }
+  .bar-legend span { display: flex; align-items: center; gap: 4px; }
+  .bar-legend .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .dot-model { background: var(--accent); }
+  .dot-other { background: var(--dim); opacity: 0.7; }
   .threshold-marker {
     position: absolute;
     top: -3px;
@@ -377,9 +391,14 @@
       <span>RAM</span>
       <span class="value" id="ram-value">-- %</span>
     </div>
-    <div class="bar-track">
+    <div class="bar-track" id="ram-bar-track">
       <div class="bar-fill" id="ram-bar" style="width:0%"></div>
       <div class="threshold-marker" id="ram-threshold-marker" style="left:85%"></div>
+    </div>
+    <div class="bar-legend" id="ram-legend" style="display:none">
+      <span><i class="dot dot-model"></i>model</span>
+      <span><i class="dot dot-other"></i>other</span>
+      <span id="ram-legend-pct" style="margin-left:auto"></span>
     </div>
   </div>
 
@@ -500,6 +519,7 @@ let _modelMeta = {};   // name → { size_mb, context_length }
 let _refreshMs = 5000;
 let _lastProvider = null;   // last known provider state from poll
 let _lastWatchdog = null;   // last known watchdog state from poll
+let _pendingAction = null;  // "stopping"|"starting"|"restarting" while async op in flight
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
 
@@ -627,8 +647,17 @@ function renderState(p, w) {
   const modelEl = document.getElementById("model-name");
   const lastEl = document.getElementById("last-action");
 
+  // Clear pending action once state reaches expected outcome
+  if (_pendingAction === "stopping" && !p.running) _pendingAction = null;
+  if (_pendingAction === "starting" && p.running)  _pendingAction = null;
+  if (_pendingAction === "restarting" && p.running) _pendingAction = null;
+
   let label, cls;
-  if (!p.running) {
+  if (_pendingAction === "stopping") {
+    label = "STOPPING"; cls = "paused";
+  } else if (_pendingAction === "starting" || _pendingAction === "restarting") {
+    label = "STARTING"; cls = "paused";
+  } else if (!p.running) {
     label = "STOPPED"; cls = "stopped";
   } else if (p.model_loaded) {
     label = "RUNNING"; cls = "running";
@@ -653,6 +682,61 @@ function renderMetrics(m) {
   setBar("ram", m.memory.used_pct, _thresholds.ram_pause_pct);
   document.getElementById("ram-value").textContent =
     m.memory.used_pct.toFixed(1) + "% — " + m.memory.pressure;
+
+  // RAM breakdown: show model segment if we know model memory and total RAM
+  const p = _lastProvider;
+  const legend = document.getElementById("ram-legend");
+  if (p && p.model_loaded && p.memory_used_mb && m.memory.total_mb) {
+    const modelPct  = Math.min((p.memory_used_mb / m.memory.total_mb) * 100, 100);
+    const otherPct  = Math.max(m.memory.used_pct - modelPct, 0);
+    const track = document.getElementById("ram-bar-track");
+    // Rebuild segments if not already split
+    if (!track.querySelector(".bar-seg-model")) {
+      track.innerHTML = "";
+      const seg1 = document.createElement("div");
+      seg1.className = "bar-seg-other";
+      seg1.id = "ram-seg-other";
+      const seg2 = document.createElement("div");
+      seg2.className = "bar-seg-model";
+      seg2.id = "ram-seg-model";
+      const marker = document.createElement("div");
+      marker.className = "threshold-marker";
+      marker.id = "ram-threshold-marker";
+      marker.style.left = _thresholds.ram_pause_pct + "%";
+      track.appendChild(seg1);
+      track.appendChild(seg2);
+      track.appendChild(marker);
+    }
+    const seg1 = document.getElementById("ram-seg-other");
+    const seg2 = document.getElementById("ram-seg-model");
+    if (seg1) seg1.style.width = otherPct.toFixed(1) + "%";
+    if (seg2) seg2.style.width = modelPct.toFixed(1) + "%";
+    if (legend) {
+      legend.style.display = "flex";
+      const pctEl = document.getElementById("ram-legend-pct");
+      if (pctEl) pctEl.textContent =
+        "model " + p.memory_used_mb + " MB (" + modelPct.toFixed(1) + "%)";
+    }
+  } else {
+    // No model loaded — restore single-fill bar
+    const track = document.getElementById("ram-bar-track");
+    if (track.querySelector(".bar-seg-model")) {
+      track.innerHTML = "";
+      const fill = document.createElement("div");
+      fill.className = "bar-fill";
+      fill.id = "ram-bar";
+      fill.style.width = m.memory.used_pct.toFixed(1) + "%";
+      const marker = document.createElement("div");
+      marker.className = "threshold-marker";
+      marker.id = "ram-threshold-marker";
+      marker.style.left = _thresholds.ram_pause_pct + "%";
+      track.appendChild(fill);
+      track.appendChild(marker);
+    } else {
+      setBar("ram", m.memory.used_pct, _thresholds.ram_pause_pct);
+    }
+    if (legend) legend.style.display = "none";
+  }
 
   setBar("cpu", m.cpu.used_pct, _thresholds.cpu_pause_pct);
   document.getElementById("cpu-value").textContent = m.cpu.used_pct.toFixed(1) + "%";
@@ -697,10 +781,9 @@ function renderProvider(p) {
   modelEl.textContent = p.model_loaded ? (p.model_name || "unknown") : "none";
   memEl.textContent   = p.memory_used_mb ? p.memory_used_mb + " MB" : "—";
 
-  // Context length from cached model metadata
-  if (p.model_loaded && p.model_name && _modelMeta[p.model_name]) {
-    const ctx = _modelMeta[p.model_name].context_length;
-    ctxEl.textContent = ctx ? _fmtCtx(ctx) : "—";
+  // Context: prefer live loaded_context_length from /api/ps (actual active window)
+  if (p.model_loaded && p.loaded_context_length) {
+    ctxEl.textContent = _fmtCtx(p.loaded_context_length);
   } else {
     ctxEl.textContent = "—";
   }
@@ -745,7 +828,7 @@ async function loadModels() {
       const opt = document.createElement("option");
       opt.value = m.name;
       const mb  = m.size_mb ? m.size_mb + " MB" : "";
-      const ctx = m.context_length ? _fmtCtx(m.context_length) : "";
+      const ctx = m.context_length ? _fmtCtx(m.context_length) + " max ctx" : "";
       const meta = [mb, ctx].filter(Boolean).join(" · ");
       opt.textContent = m.name + (meta ? "  (" + meta + ")" : "");
       sel.appendChild(opt);
@@ -810,7 +893,7 @@ function renderMgmtList(models) {
     const metaSpan = document.createElement("div");
     metaSpan.className = "model-info";
     const mb  = m.size_mb ? m.size_mb + " MB" : "";
-    const ctx = m.context_length ? _fmtCtx(m.context_length) : "";
+    const ctx = m.context_length ? _fmtCtx(m.context_length) + " max ctx" : "";
     metaSpan.textContent = [mb, ctx].filter(Boolean).join(" · ");
     info.appendChild(nameSpan);
     info.appendChild(metaSpan);
@@ -876,6 +959,11 @@ async function pullModel() {
 // ── Actions ───────────────────────────────────────────────────────────────────
 
 async function action(name) {
+  // Track async operations so the badge shows a transitioning state while polling
+  if (name === "stop")    _pendingAction = "stopping";
+  if (name === "start")   _pendingAction = "starting";
+  if (name === "restart") _pendingAction = "restarting";
+
   setButtonsDisabled(true);
   const lastEl = document.getElementById("last-action");
   lastEl.textContent = name.toUpperCase() + "...";
@@ -885,6 +973,7 @@ async function action(name) {
     lastEl.textContent = name.toUpperCase() + (data.ok ? " — ok" : " — failed");
     await poll();
   } catch (e) {
+    _pendingAction = null;
     lastEl.textContent = name.toUpperCase() + " — error: " + e.message;
   } finally {
     // Re-enable buttons based on last known state; fallback to all-on if unknown
