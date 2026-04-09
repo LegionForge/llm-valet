@@ -19,6 +19,13 @@ venv/
 .idea/
 *.swp
 
+# Claude Code session data
+.claude/
+
+# Node (not a Node project — ignore if accidentally created)
+package-lock.json
+node_modules/
+
 # OS
 .DS_Store
 Thumbs.db

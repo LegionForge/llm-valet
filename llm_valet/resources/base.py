@@ -1,8 +1,10 @@
 import enum
+import sys
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Optional
+
+import psutil
 
 
 class PressureLevel(enum.Enum):
@@ -28,10 +30,19 @@ class CPUMetrics:
 @dataclass
 class GPUMetrics:
     available: bool              # False if no GPU driver accessible
-    vram_total_mb: Optional[int]
-    vram_used_mb: Optional[int]
-    vram_used_pct: Optional[float]
-    compute_pct: Optional[float]
+    vram_total_mb: int | None
+    vram_used_mb: int | None
+    vram_used_pct: float | None
+    compute_pct: float | None
+
+
+@dataclass
+class DiskMetrics:
+    path: str               # monitored mount point ("/" or "C:\\")
+    total_mb: int
+    used_mb: int
+    free_mb: int
+    used_pct: float
 
 
 @dataclass
@@ -39,6 +50,7 @@ class SystemMetrics:
     memory: MemoryMetrics
     cpu: CPUMetrics
     gpu: GPUMetrics
+    disk: DiskMetrics
     timestamp: float = field(default_factory=time.time)
 
 
@@ -48,8 +60,26 @@ class ResourceCollector(ABC):
 
     @abstractmethod
     def supported_metrics(self) -> set[str]: ...
-    # e.g. {"memory", "cpu", "gpu", "pressure"}
+    # e.g. {"memory", "cpu", "gpu", "pressure", "disk"}
     # Callers check this before trusting Optional fields
+
+    def collect_disk(self) -> DiskMetrics:
+        """
+        Cross-platform disk usage for the system root volume.
+        psutil.disk_usage() is identical on macOS, Linux, and Windows —
+        no need to override in platform subclasses.
+        A full root disk crashes model downloads and can corrupt Ollama's
+        model index, making this a safety metric rather than informational.
+        """
+        path = "C:\\" if sys.platform == "win32" else "/"
+        usage = psutil.disk_usage(path)
+        return DiskMetrics(
+            path=path,
+            total_mb=usage.total // (1024 * 1024),
+            used_mb=usage.used // (1024 * 1024),
+            free_mb=usage.free // (1024 * 1024),
+            used_pct=usage.percent,
+        )
 
 
 @dataclass
@@ -80,23 +110,25 @@ class ThresholdEngine:
         """
         Returns (should_pause, reason).
 
-        - RAM: pause immediately when used_pct >= ram_pause_pct OR
-               pressure == CRITICAL.
+        - RAM: pause when used_pct >= ram_pause_pct.
         - CPU: caller enforces the sustained window; this returns True whenever
                cpu exceeds the threshold so the caller can count ticks.
         - GPU VRAM: pause immediately when vram_used_pct >= gpu_vram_pause_pct.
         - Resume: returns False only when ALL metrics are below their resume thresholds.
           The resume check is separated into evaluate_resume() so callers can
           apply the grace-period window independently.
+
+        NOTE — memory_pressure level is intentionally NOT used as an independent
+        pause trigger. On Apple Silicon, loading a large model into unified memory
+        routinely produces transient CRITICAL pressure readings even when RAM% is
+        within the user's configured threshold. Using CRITICAL as an override
+        defeats the purpose of ram_pause_pct configuration. Pressure level is
+        still reported in /metrics for informational purposes.
         """
         t = self._t
         mem = metrics.memory
         cpu = metrics.cpu
         gpu = metrics.gpu
-
-        # Memory pressure — OS-level signal takes priority on macOS
-        if mem.pressure == PressureLevel.CRITICAL:
-            return True, "memory pressure level CRITICAL"
 
         if mem.used_pct >= t.ram_pause_pct:
             return True, f"RAM {mem.used_pct:.1f}% >= {t.ram_pause_pct}% threshold"
@@ -108,7 +140,7 @@ class ThresholdEngine:
         # GPU VRAM
         if gpu.available and gpu.vram_used_pct is not None:
             if gpu.vram_used_pct >= t.gpu_vram_pause_pct:
-                return True, f"GPU VRAM {gpu.vram_used_pct:.1f}% >= {t.gpu_vram_pause_pct}% threshold"
+                return True, f"GPU VRAM {gpu.vram_used_pct:.1f}% >= {t.gpu_vram_pause_pct}% threshold"  # noqa: E501
 
         return False, ""
 
@@ -125,9 +157,6 @@ class ThresholdEngine:
         mem = metrics.memory
         cpu = metrics.cpu
         gpu = metrics.gpu
-
-        if mem.pressure == PressureLevel.CRITICAL:
-            return False, "memory pressure level still CRITICAL"
 
         if mem.used_pct >= t.ram_resume_pct:
             return False, f"RAM {mem.used_pct:.1f}% >= resume threshold {t.ram_resume_pct}%"
