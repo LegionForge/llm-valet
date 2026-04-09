@@ -129,7 +129,7 @@ def api(request: pytest.FixtureRequest):
     ):
         app = create_app(settings)
 
-    with TestClient(app, raise_server_exceptions=True) as client:
+    with TestClient(app, base_url="http://127.0.0.1:8765", raise_server_exceptions=True) as client:
         yield client, mock_provider, mock_collector
 
 
