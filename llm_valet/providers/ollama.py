@@ -188,12 +188,14 @@ class OllamaProvider(LLMProvider):
             loaded = models[0]
             size_mb = (int(loaded.get("size") or 0)) // (1024 * 1024) or None
             size_vram_mb = (int(loaded.get("size_vram") or 0)) // (1024 * 1024) or None
+            loaded_ctx = loaded.get("context_length") or None
             return ProviderStatus(
                 running=True,
                 model_loaded=True,
                 model_name=str(loaded.get("name", "")) or None,
                 memory_used_mb=size_mb,
                 size_vram_mb=size_vram_mb,
+                loaded_context_length=int(loaded_ctx) if loaded_ctx else None,
             )
         except httpx.HTTPError as exc:
             logger.error("status request failed", extra={"error": str(exc)})
