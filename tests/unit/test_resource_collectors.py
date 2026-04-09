@@ -193,15 +193,15 @@ class TestTryAmdSysfs:
         return mock_cls
 
     def test_returns_none_when_sysfs_absent(self) -> None:
-        with patch("llm_valet.resources.linux.Path", self._mock_path(is_file=False)):
+        # Path is imported inside _try_amd_sysfs() — patch at pathlib level
+        with patch("pathlib.Path", self._mock_path(is_file=False)):
             result = self._call()
         assert result is None
 
     def test_returns_gpu_metrics_from_sysfs(self) -> None:
         total_bytes = 8 * 1024 * 1024 * 1024  # 8 GB
         used_bytes  = 2 * 1024 * 1024 * 1024  # 2 GB
-        with patch("llm_valet.resources.linux.Path",
-                   self._mock_path(total=total_bytes, used=used_bytes)):
+        with patch("pathlib.Path", self._mock_path(total=total_bytes, used=used_bytes)):
             result = self._call()
 
         assert result is not None
@@ -211,8 +211,7 @@ class TestTryAmdSysfs:
         assert result.vram_used_pct == 25.0
 
     def test_returns_none_on_read_error(self) -> None:
-        with patch("llm_valet.resources.linux.Path",
-                   self._mock_path(read_exc=OSError("permission denied"))):
+        with patch("pathlib.Path", self._mock_path(read_exc=OSError("permission denied"))):
             result = self._call()
         assert result is None
 
