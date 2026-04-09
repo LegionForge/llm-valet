@@ -2,6 +2,22 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## GitHub Pre-commit Scrub Rules
+
+Before committing or creating a PR, verify these are NOT present in any tracked file:
+
+- **IPs / hostnames** — dev/test machine IPs (e.g. LAN RFC1918 addresses), internal hostnames, mDNS names (`.local`) of test hardware
+- **Usernames** — SSH usernames, system account names, OS usernames of test participants other than the public project author (JP Cruz / jp@legionforge.org)
+- **SSH details** — key paths, key fingerprints, `user@host` patterns, port numbers of internal machines
+- **Network topology** — which machine is on which IP, subnet layout, router info
+- **API keys / tokens / passwords** — even test/temporary ones
+
+**What is allowed:** `localhost`, `127.0.0.1`, `0.0.0.0`, `<user>`, `<hostname>`, `<ip>` as placeholders. Generic port numbers that are part of the documented interface (e.g. 8765, 11434) are fine.
+
+**When writing test docs or session notes:** Use placeholders from the start. Never copy-paste raw `ssh user@ip` commands or `ls -la` output containing system usernames into committed files.
+
+---
+
 ## Project Overview
 
 **llm-valet** (`LegionForge/llm-valet`) is a cross-platform drop-in utility that manages Ollama (and other LLM providers) lifecycle based on manual control or automatic resource/activity sensing. Target platforms: macOS, Windows, Linux.
