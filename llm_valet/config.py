@@ -40,7 +40,8 @@ class Settings:
             if key in allowed:
                 setattr(self.thresholds, key, value)
             else:
-                logger.warning("unknown threshold key ignored", extra={"key": key})
+                safe_key = str(key).replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
+                logger.warning("unknown threshold key ignored", extra={"key": safe_key})
         _save_settings(self)
         return asdict(self.thresholds)
 
