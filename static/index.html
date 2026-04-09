@@ -680,8 +680,10 @@ function renderMetrics(m) {
   if (!m) return;
 
   setBar("ram", m.memory.used_pct, _thresholds.ram_pause_pct);
+  const _ramTotal = m.memory.total_mb
+    ? " of " + (m.memory.total_mb / 1024).toFixed(1) + " GB" : "";
   document.getElementById("ram-value").textContent =
-    m.memory.used_pct.toFixed(1) + "% — " + m.memory.pressure;
+    m.memory.used_pct.toFixed(1) + "%" + _ramTotal + " — " + m.memory.pressure;
 
   // RAM breakdown: show model segment if we know model memory and total RAM
   const p = _lastProvider;
