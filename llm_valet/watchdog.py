@@ -44,12 +44,17 @@ class Watchdog:
         self._cpu_pressure_ticks = 0        # counts consecutive ticks above CPU threshold
         self._paused_at: float | None = None
         self._running = False
+        self._last_reason: str = ""         # reason string from last state transition
 
     # ── Public API ────────────────────────────────────────────────────────────
 
     @property
     def state(self) -> WatchdogState:
         return self._state
+
+    @property
+    def last_reason(self) -> str:
+        return self._last_reason
 
     async def run(self) -> None:
         """Main watchdog loop — runs until stop() is called."""
@@ -75,6 +80,7 @@ class Watchdog:
         """
         self._state = WatchdogState.PAUSED
         self._paused_at = time.monotonic()
+        self._last_reason = "manual pause"
         logger.info("watchdog state synced — manual pause")
 
     def notify_manual_resume(self) -> None:
@@ -84,6 +90,7 @@ class Watchdog:
         """
         self._state = WatchdogState.RUNNING
         self._paused_at = None
+        self._last_reason = "manual resume"
         logger.info("watchdog state synced — manual resume")
 
     # ── Tick ──────────────────────────────────────────────────────────────────
@@ -140,6 +147,7 @@ class Watchdog:
             self._state = WatchdogState.PAUSED
             self._paused_at = time.monotonic()
             self._cpu_pressure_ticks = 0
+            self._last_reason = reason
             logger.info("paused", extra={"reason": reason})
         else:
             self._state = WatchdogState.RUNNING
@@ -152,6 +160,7 @@ class Watchdog:
         if success:
             self._state = WatchdogState.RUNNING
             self._paused_at = None
+            self._last_reason = reason
             logger.info("resumed", extra={"reason": reason})
         else:
             self._state = WatchdogState.PAUSED
