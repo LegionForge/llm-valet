@@ -85,12 +85,14 @@ class TestEvaluatePause:
         should_pause, _ = self.engine.evaluate(_metrics(cpu_pct=89.9))
         assert should_pause is False
 
-    def test_critical_memory_pressure_triggers_pause(self) -> None:
-        should_pause, reason = self.engine.evaluate(
+    def test_critical_memory_pressure_informational_only(self) -> None:
+        """CRITICAL pressure alone must not trigger pause — RAM% is authoritative.
+        Removed as hard trigger in v0.1.0: transient CRITICAL during model load on
+        Apple Silicon was defeating user-configured ram_pause_pct thresholds."""
+        should_pause, _ = self.engine.evaluate(
             _metrics(ram_pct=10.0, pressure=PressureLevel.CRITICAL)
         )
-        assert should_pause is True
-        assert "CRITICAL" in reason
+        assert should_pause is False
 
     def test_warn_memory_pressure_alone_does_not_pause(self) -> None:
         """WARN pressure without crossing RAM % threshold should not pause."""
@@ -99,13 +101,12 @@ class TestEvaluatePause:
         )
         assert should_pause is False
 
-    def test_critical_pressure_overrides_low_ram_pct(self) -> None:
-        """OS-level critical signal takes priority even when raw % looks fine."""
-        should_pause, reason = self.engine.evaluate(
+    def test_critical_pressure_does_not_override_ram_pct(self) -> None:
+        """OS-level CRITICAL does not override RAM% — user threshold is authoritative."""
+        should_pause, _ = self.engine.evaluate(
             _metrics(ram_pct=40.0, pressure=PressureLevel.CRITICAL)
         )
-        assert should_pause is True
-        assert "CRITICAL" in reason
+        assert should_pause is False
 
     def test_gpu_vram_at_threshold_triggers_pause(self) -> None:
         should_pause, reason = self.engine.evaluate(
@@ -176,12 +177,12 @@ class TestEvaluateResume:
         assert should_pause is False
         assert safe_to_resume is False
 
-    def test_critical_pressure_blocks_resume(self) -> None:
-        safe, reason = self.engine.evaluate_resume(
+    def test_critical_pressure_does_not_block_resume(self) -> None:
+        """CRITICAL pressure is informational only — RAM% governs resume decisions."""
+        safe, _ = self.engine.evaluate_resume(
             _metrics(ram_pct=10.0, pressure=PressureLevel.CRITICAL)
         )
-        assert safe is False
-        assert "CRITICAL" in reason
+        assert safe is True
 
     def test_elevated_cpu_blocks_resume(self) -> None:
         safe, reason = self.engine.evaluate_resume(_metrics(cpu_pct=95.0))
