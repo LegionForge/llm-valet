@@ -91,6 +91,9 @@ class ResourceThresholds:
     gpu_vram_pause_pct: float = 85.0
     pause_timeout_seconds: int = 120  # grace period before resume after resource clears
     check_interval_seconds: int = 10
+    # When False: RAM-triggered pauses require manual /resume — prevents oscillation
+    # on machines where the model itself is the dominant RAM consumer.
+    auto_resume_on_ram_pressure: bool = True
 
 
 class ThresholdEngine:
