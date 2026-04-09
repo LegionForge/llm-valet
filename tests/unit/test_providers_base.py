@@ -16,6 +16,25 @@ def test_provider_status_optional_fields() -> None:
     assert s.memory_used_mb is None
 
 
+def test_provider_status_size_vram_mb_defaults_none() -> None:
+    """size_vram_mb is optional — absent from providers that don't expose VRAM split."""
+    s = ProviderStatus(running=True, model_loaded=True, model_name="llama3", memory_used_mb=4096)
+    assert s.size_vram_mb is None
+
+
+def test_provider_status_size_vram_mb_present() -> None:
+    """When Ollama /api/ps returns size_vram, the field is populated."""
+    s = ProviderStatus(
+        running=True,
+        model_loaded=True,
+        model_name="llama3",
+        memory_used_mb=6144,
+        size_vram_mb=4096,
+    )
+    assert s.size_vram_mb == 4096
+    assert s.memory_used_mb == 6144
+
+
 def test_model_info_fields() -> None:
     m = ModelInfo(name="qwen3.5:latest", size_mb=8141, context_length=32768)
     assert m.name == "qwen3.5:latest"

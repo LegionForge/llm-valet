@@ -8,6 +8,7 @@ class ProviderStatus:
     model_loaded: bool
     model_name: str | None
     memory_used_mb: int | None
+    size_vram_mb: int | None = None   # VRAM portion of model memory (Ollama /api/ps size_vram)
 
 
 @dataclass
@@ -41,3 +42,9 @@ class LLMProvider(ABC):
 
     @abstractmethod
     async def load_model(self, model_name: str) -> bool: ...
+
+    @abstractmethod
+    async def delete_model(self, model_name: str) -> bool: ...
+
+    @abstractmethod
+    async def pull_model(self, model_name: str) -> bool: ...

@@ -118,7 +118,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(
         title="llm-valet",
         description="LLM lifecycle manager — pause/resume based on resource pressure and gaming detection",  # noqa: E501
-        version="0.1.0",
+        version="0.2.0",
         lifespan=lifespan,
     )
 
@@ -190,7 +190,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {
             "provider": provider_status.__dict__,
             "metrics": _metrics_to_dict(metrics),
-            "watchdog": {"state": w.state.value},
+            "watchdog": {"state": w.state.value, "last_reason": w.last_reason},
         }
 
     @app.get("/watchdog")
@@ -198,8 +198,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         _: Auth,
         w: Annotated[Watchdog, Depends(get_watchdog)],
     ) -> dict[str, Any]:
-        """Current watchdog state machine state."""
-        return {"state": w.state.value}
+        """Current watchdog state machine state and last transition reason."""
+        return {"state": w.state.value, "last_reason": w.last_reason}
 
     @app.get("/metrics")
     async def get_metrics(
@@ -258,6 +258,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if success:
             w.notify_manual_resume()
         return {"ok": success, "action": "load", "model": model_name}
+
+    @app.delete("/models/{model_name}")
+    async def delete_model(
+        _: Auth,
+        model_name: str,
+        p: Annotated[LLMProvider, Depends(get_provider)],
+    ) -> dict[str, Any]:
+        """Delete a locally stored model."""
+        success = await p.delete_model(model_name)
+        return {"ok": success, "action": "delete", "model": model_name}
+
+    @app.post("/models/pull")
+    async def pull_model(
+        _: Auth,
+        p: Annotated[LLMProvider, Depends(get_provider)],
+        request: Request,
+    ) -> dict[str, Any]:
+        """Pull (download) a model from the registry. Blocks until complete."""
+        body = await request.json()
+        model_name = body.get("model", "")
+        if not isinstance(model_name, str) or not model_name:
+            raise HTTPException(status_code=422, detail="model field required")
+        success = await p.pull_model(model_name)
+        return {"ok": success, "action": "pull", "model": model_name}
 
     @app.post("/start")
     async def post_start(

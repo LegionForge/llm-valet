@@ -187,11 +187,13 @@ class OllamaProvider(LLMProvider):
 
             loaded = models[0]
             size_mb = (int(loaded.get("size") or 0)) // (1024 * 1024) or None
+            size_vram_mb = (int(loaded.get("size_vram") or 0)) // (1024 * 1024) or None
             return ProviderStatus(
                 running=True,
                 model_loaded=True,
                 model_name=str(loaded.get("name", "")) or None,
                 memory_used_mb=size_mb,
+                size_vram_mb=size_vram_mb,
             )
         except httpx.HTTPError as exc:
             logger.error("status request failed", extra={"error": str(exc)})
@@ -289,6 +291,44 @@ class OllamaProvider(LLMProvider):
             return True
         except httpx.HTTPError as exc:
             logger.error("load_model: pre-warm failed", extra={"error": str(exc)})
+            return False
+
+    async def delete_model(self, model_name: str) -> bool:
+        """Delete a model from local storage via DELETE /api/delete."""
+        if not _MODEL_NAME_RE.match(model_name):
+            logger.error("delete_model rejected — invalid model name", extra={"model": model_name})
+            return False
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                resp = await client.request(
+                    "DELETE",
+                    f"{self._base_url}/api/delete",
+                    json={"model": model_name},
+                )
+                resp.raise_for_status()
+                logger.info("model deleted", extra={"model": model_name})
+                return True
+        except httpx.HTTPError as exc:
+            logger.error("delete_model request failed", extra={"error": str(exc)})
+            return False
+
+    async def pull_model(self, model_name: str) -> bool:
+        """Pull (download) a model via POST /api/pull. Blocks until complete."""
+        if not _MODEL_NAME_RE.match(model_name):
+            logger.error("pull_model rejected — invalid model name", extra={"model": model_name})
+            return False
+        try:
+            logger.info("pulling model", extra={"model": model_name})
+            async with httpx.AsyncClient(timeout=600.0) as client:
+                resp = await client.post(
+                    f"{self._base_url}/api/pull",
+                    json={"model": model_name, "stream": False},
+                )
+                resp.raise_for_status()
+                logger.info("model pull complete", extra={"model": model_name})
+                return True
+        except httpx.HTTPError as exc:
+            logger.error("pull_model request failed", extra={"error": str(exc)})
             return False
 
     # ── Internal helpers ──────────────────────────────────────────────────────

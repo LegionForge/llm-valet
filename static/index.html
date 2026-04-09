@@ -5,76 +5,131 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>llm-valet</title>
 <style>
+  /* ── Themes ─────────────────────────────────────────────────────────────── */
   :root {
-    --bg:       #0e0e0e;
-    --surface:  #1a1a1a;
-    --border:   #2e2e2e;
-    --text:     #d4d4d4;
-    --dim:      #6a6a6a;
-    --accent:   #4e9aff;
-    --green:    #4ec94e;
-    --yellow:   #e6c440;
-    --red:      #e05252;
-    --bar-bg:   #2a2a2a;
+    --bg:      #0e0e0e;
+    --surface: #1a1a1a;
+    --border:  #2e2e2e;
+    --text:    #e8e8e8;
+    --dim:     #888;
+    --accent:  #4a9eff;
+    --green:   #4caf7d;
+    --yellow:  #e8a838;
+    --red:     #e05050;
+    --bar-bg:  #2a2a2a;
   }
+  :root[data-theme="light"] {
+    --bg:      #f4f4f4;
+    --surface: #ffffff;
+    --border:  #d0d0d0;
+    --text:    #1a1a1a;
+    --dim:     #666;
+    --accent:  #1a6fd4;
+    --green:   #2e7d52;
+    --yellow:  #b07800;
+    --red:     #c0392b;
+    --bar-bg:  #e0e0e0;
+  }
+
+  /* ── Base ────────────────────────────────────────────────────────────────── */
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     background: var(--bg);
     color: var(--text);
-    font-family: "Cascadia Code", "Fira Mono", "Consolas", monospace;
+    font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", ui-monospace,
+                 "Courier New", monospace;
     font-size: 13px;
-    padding: 24px;
-    max-width: 720px;
+    line-height: 1.55;
+    max-width: 660px;
     margin: 0 auto;
+    padding: 32px 20px 48px;
   }
-  h1 { font-size: 18px; letter-spacing: 0.08em; color: var(--accent); margin-bottom: 4px; }
-  .subtitle { color: var(--dim); font-size: 11px; margin-bottom: 28px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
 
-  /* State badge */
-  .badge {
-    display: inline-block;
-    padding: 4px 14px;
-    border-radius: 3px;
-    font-size: 12px;
-    font-weight: bold;
-    letter-spacing: 0.1em;
-    background: var(--surface);
+  /* ── Header ──────────────────────────────────────────────────────────────── */
+  .header-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 4px;
+  }
+  h1 { font-size: 20px; font-weight: 700; letter-spacing: 0.04em; }
+  .header-actions { display: flex; gap: 10px; align-items: center; margin-top: 2px; }
+  .icon-btn {
+    background: none;
     border: 1px solid var(--border);
     color: var(--dim);
+    width: 26px;
+    height: 26px;
+    border-radius: 3px;
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: border-color 0.15s, color 0.15s;
+    padding: 0;
   }
-  .badge.running  { border-color: var(--green);  color: var(--green); }
-  .badge.paused   { border-color: var(--yellow); color: var(--yellow); }
-  .badge.stopped  { border-color: var(--red);    color: var(--red); }
+  .icon-btn:hover { border-color: var(--accent); color: var(--accent); }
 
-  /* Sections */
-  section { margin-bottom: 28px; }
-  .section-title { font-size: 11px; color: var(--dim); text-transform: uppercase;
-                   letter-spacing: 0.12em; margin-bottom: 12px; }
+  .subtitle {
+    font-size: 11px;
+    color: var(--dim);
+    margin-bottom: 28px;
+  }
 
-  /* Status row */
-  .status-row { display: flex; align-items: center; gap: 16px; margin-bottom: 8px; }
-  .model-name { color: var(--dim); font-size: 12px; }
-  .last-action { color: var(--dim); font-size: 11px; margin-top: 6px; min-height: 16px; }
+  /* ── Section ─────────────────────────────────────────────────────────────── */
+  section { margin-bottom: 0; }
+  .section-title {
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--dim);
+    margin-bottom: 10px;
+  }
+  hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
 
-  /* Resource bars */
-  .metric { margin-bottom: 14px; }
+  /* ── State badge ─────────────────────────────────────────────────────────── */
+  .status-row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  .badge {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    padding: 3px 9px;
+    border-radius: 3px;
+    border: 1px solid currentColor;
+  }
+  .badge.running  { color: var(--green);  }
+  .badge.paused   { color: var(--yellow); }
+  .badge.stopped  { color: var(--red);    }
+  .model-name { font-size: 12px; color: var(--dim); }
+
+  .last-action { font-size: 11px; color: var(--dim); min-height: 16px; margin-top: 4px; }
+
+  /* ── Resource bars ───────────────────────────────────────────────────────── */
+  .metric { margin-bottom: 12px; }
   .metric-label {
-    display: flex; justify-content: space-between;
-    font-size: 11px; color: var(--dim); margin-bottom: 4px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--dim);
+    margin-bottom: 4px;
   }
   .metric-label .value { color: var(--text); }
   .bar-track {
     position: relative;
-    height: 8px;
     background: var(--bar-bg);
     border-radius: 2px;
+    height: 8px;
     overflow: visible;
   }
   .bar-fill {
     height: 100%;
     border-radius: 2px;
-    transition: width 0.4s ease, background 0.4s ease;
     background: var(--accent);
+    transition: width 0.4s ease;
   }
   .bar-fill.warn     { background: var(--yellow); }
   .bar-fill.critical { background: var(--red); }
@@ -88,7 +143,7 @@
     border-radius: 1px;
   }
 
-  /* Buttons */
+  /* ── Buttons ─────────────────────────────────────────────────────────────── */
   .btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
   button {
     background: var(--surface);
@@ -107,7 +162,7 @@
   button:disabled { opacity: 0.35; cursor: not-allowed; }
   button.danger:hover { border-color: var(--red); color: var(--red); }
 
-  /* Sliders */
+  /* ── Sliders ─────────────────────────────────────────────────────────────── */
   .slider-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 24px; }
   .slider-item label {
     display: flex; justify-content: space-between;
@@ -120,7 +175,7 @@
     cursor: pointer;
   }
 
-  /* Error banner */
+  /* ── Error banner ────────────────────────────────────────────────────────── */
   #error-banner {
     display: none;
     background: #2a1a1a;
@@ -131,8 +186,9 @@
     border-radius: 3px;
     margin-bottom: 16px;
   }
+  :root[data-theme="light"] #error-banner { background: #fdecea; }
 
-  /* API key prompt */
+  /* ── API key prompt ──────────────────────────────────────────────────────── */
   #key-prompt {
     display: none;
     background: var(--surface);
@@ -155,11 +211,22 @@
   }
   #key-input:focus { outline: none; border-color: var(--accent); }
 
-  /* Provider section */
-  .provider-row { display: flex; align-items: baseline; gap: 12px; margin-bottom: 6px; }
+  /* ── Provider section ────────────────────────────────────────────────────── */
+  .provider-header { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+  .provider-badge {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    padding: 1px 6px;
+    border-radius: 2px;
+  }
+  .provider-stats { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 6px; }
   .provider-stat { font-size: 12px; color: var(--dim); }
   .provider-stat span { color: var(--text); }
-  .model-select-row { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+  .layer-ratio { font-size: 11px; color: var(--dim); margin-bottom: 10px; min-height: 15px; }
+  .model-select-row { display: flex; gap: 8px; align-items: center; }
   select {
     flex: 1;
     background: var(--bg);
@@ -172,14 +239,85 @@
   }
   select:focus { outline: none; border-color: var(--accent); }
 
-  /* Separator */
-  hr { border: none; border-top: 1px solid var(--border); margin: 4px 0 20px; }
+  /* ── Model management panel ──────────────────────────────────────────────── */
+  .collapsible-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+    margin-bottom: 0;
+  }
+  .collapsible-header .arrow {
+    font-size: 9px;
+    color: var(--dim);
+    transition: transform 0.2s;
+    display: inline-block;
+  }
+  .collapsible-header.open .arrow { transform: rotate(90deg); }
+  .collapsible-body {
+    display: none;
+    margin-top: 12px;
+  }
+  .collapsible-body.open { display: block; }
+
+  .model-list { margin-bottom: 12px; }
+  .model-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+  }
+  .model-row:last-child { border-bottom: none; }
+  .model-row .model-info { color: var(--dim); font-size: 11px; }
+  .btn-sm {
+    background: var(--surface);
+    color: var(--dim);
+    border: 1px solid var(--border);
+    padding: 3px 10px;
+    border-radius: 3px;
+    font-family: inherit;
+    font-size: 11px;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .btn-sm:hover { border-color: var(--red); color: var(--red); }
+  .pull-row { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
+  #pull-input {
+    flex: 1;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 6px 10px;
+    border-radius: 3px;
+    font-family: inherit;
+    font-size: 12px;
+  }
+  #pull-input:focus { outline: none; border-color: var(--accent); }
+  #pull-status { font-size: 11px; color: var(--dim); margin-top: 6px; min-height: 15px; }
+
+  /* ── Separator ───────────────────────────────────────────────────────────── */
+  .load-status { font-size: 11px; color: var(--dim); margin-top: 6px; min-height: 15px; }
 </style>
 </head>
 <body>
 
-<h1>llm-valet</h1>
-<p class="subtitle">LLM lifecycle manager</p>
+<!-- Header -->
+<div class="header-row">
+  <h1>llm-valet</h1>
+  <div class="header-actions">
+    <button class="icon-btn" id="theme-btn" title="Toggle light/dark mode" onclick="toggleTheme()">◑</button>
+    <a href="https://github.com/LegionForge/llm-valet#readme" target="_blank" rel="noopener">
+      <button class="icon-btn" title="Help / README">?</button>
+    </a>
+  </div>
+</div>
+<p class="subtitle">
+  LLM lifecycle manager ·
+  <a href="https://legionforge.org" target="_blank" rel="noopener">by LegionForge</a>
+</p>
 
 <div id="error-banner"></div>
 
@@ -206,19 +344,23 @@
 
 <!-- Provider -->
 <section>
-  <div class="section-title">Provider</div>
-  <div class="provider-row">
+  <div class="provider-header">
+    <div class="section-title" style="margin-bottom:0">Provider</div>
+    <span class="provider-badge" id="provider-badge">OLLAMA</span>
+  </div>
+  <div class="provider-stats">
     <div class="provider-stat">Loaded: <span id="pv-model">—</span></div>
     <div class="provider-stat">Memory: <span id="pv-mem">—</span></div>
     <div class="provider-stat">Context: <span id="pv-ctx">—</span></div>
   </div>
+  <div class="layer-ratio" id="layer-ratio"></div>
   <div class="model-select-row">
     <select id="model-select">
       <option value="">— select model —</option>
     </select>
     <button id="btn-load" onclick="loadModel()">LOAD</button>
   </div>
-  <div class="last-action" id="load-status"></div>
+  <div class="load-status" id="load-status"></div>
 </section>
 
 <hr>
@@ -267,17 +409,17 @@
 <section>
   <div class="section-title">Controls</div>
   <div class="btn-row">
-    <button id="btn-pause"  onclick="action('pause')">PAUSE</button>
-    <button id="btn-resume" onclick="action('resume')">RESUME</button>
-    <button id="btn-start"  onclick="action('start')">START</button>
-    <button id="btn-stop"   class="danger" onclick="action('stop')">STOP</button>
+    <button id="btn-pause"   onclick="action('pause')">PAUSE</button>
+    <button id="btn-resume"  onclick="action('resume')">RESUME</button>
+    <button id="btn-start"   onclick="action('start')">START</button>
+    <button id="btn-stop"    class="danger" onclick="action('stop')">STOP</button>
     <button id="btn-restart" onclick="action('restart')">RESTART</button>
   </div>
 </section>
 
 <hr>
 
-<!-- Thresholds -->
+<!-- Thresholds + Refresh Rate -->
 <section>
   <div class="section-title">Thresholds</div>
   <div class="slider-grid">
@@ -305,6 +447,43 @@
              oninput="updateLabel('lbl-gpu-pause', this.value, '%')"
              onchange="saveThresholds()">
     </div>
+    <div class="slider-item">
+      <label>Refresh rate <span id="lbl-refresh">5s</span></label>
+      <input type="range" id="sl-refresh" min="5" max="60" value="5"
+             oninput="updateLabel('lbl-refresh', this.value, 's')"
+             onchange="applyRefreshRate()">
+    </div>
+  </div>
+  <div style="margin-top:14px;font-size:12px;display:flex;align-items:center;gap:8px">
+    <input type="checkbox" id="cb-auto-resume" checked onchange="saveThresholds()"
+           style="accent-color:var(--accent);cursor:pointer;width:14px;height:14px">
+    <label for="cb-auto-resume" style="color:var(--dim);cursor:pointer">
+      Auto-resume after RAM pressure clears
+      <span style="color:var(--dim);font-size:10px">
+        (uncheck to prevent oscillation when model fills RAM)
+      </span>
+    </label>
+  </div>
+</section>
+
+<hr>
+
+<!-- Model Management -->
+<section>
+  <div class="collapsible-header" id="mgmt-header" onclick="toggleMgmt()">
+    <div class="section-title" style="margin-bottom:0">Model Management</div>
+    <span class="arrow">▶</span>
+  </div>
+  <div class="collapsible-body" id="mgmt-body">
+    <div class="model-list" id="mgmt-model-list">
+      <div style="color:var(--dim);font-size:11px">Loading models…</div>
+    </div>
+    <div style="font-size:11px;color:var(--dim);margin-bottom:6px">Pull model</div>
+    <div class="pull-row">
+      <input type="text" id="pull-input" placeholder="model:tag (e.g. llama3.2:3b)" autocomplete="off">
+      <button onclick="pullModel()">PULL</button>
+    </div>
+    <div id="pull-status"></div>
   </div>
 </section>
 
@@ -315,6 +494,24 @@ const API = "";  // same-origin
 let _thresholds = { ram_pause_pct: 85, cpu_pause_pct: 90, gpu_vram_pause_pct: 85 };
 let _polling = null;
 let _modelMeta = {};   // name → { size_mb, context_length }
+let _refreshMs = 5000;
+
+// ── Theme ─────────────────────────────────────────────────────────────────────
+
+function initTheme() {
+  const saved = localStorage.getItem("llm_valet_theme") || "dark";
+  applyTheme(saved);
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+  localStorage.setItem("llm_valet_theme", theme);
+}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute("data-theme") || "dark";
+  applyTheme(current === "dark" ? "light" : "dark");
+}
 
 // ── API key management ────────────────────────────────────────────────────────
 
@@ -346,7 +543,6 @@ function submitKey() {
   boot();
 }
 
-// Enter key submits the key input
 document.addEventListener("keydown", function(e) {
   if (e.key === "Enter" && document.activeElement === document.getElementById("key-input")) {
     submitKey();
@@ -367,13 +563,34 @@ async function apiFetch(path, options) {
   return r;
 }
 
-// ── Boot ─────────────────────────────────────────────────────────────────────
+// ── Boot ──────────────────────────────────────────────────────────────────────
 
 async function boot() {
+  initRefreshRate();
   await loadConfig();
   await loadModels();
   await poll();
-  _polling = setInterval(poll, 5000);
+  _polling = setInterval(poll, _refreshMs);
+}
+
+// ── Refresh rate ──────────────────────────────────────────────────────────────
+
+function initRefreshRate() {
+  const saved = parseInt(localStorage.getItem("llm_valet_refresh") || "5", 10);
+  const clamped = Math.max(5, Math.min(60, saved));
+  _refreshMs = clamped * 1000;
+  const sl = document.getElementById("sl-refresh");
+  const lbl = document.getElementById("lbl-refresh");
+  if (sl)  sl.value = clamped;
+  if (lbl) lbl.textContent = clamped + "s";
+}
+
+function applyRefreshRate() {
+  const val = parseInt(document.getElementById("sl-refresh").value, 10);
+  _refreshMs = val * 1000;
+  localStorage.setItem("llm_valet_refresh", String(val));
+  clearInterval(_polling);
+  _polling = setInterval(poll, _refreshMs);
 }
 
 // ── Polling ───────────────────────────────────────────────────────────────────
@@ -384,7 +601,7 @@ async function poll() {
     if (!r.ok) throw new Error("HTTP " + r.status);
     const data = await r.json();
     hideError();
-    renderState(data.provider);
+    renderState(data.provider, data.watchdog);
     renderProvider(data.provider);
     renderMetrics(data.metrics);
   } catch (e) {
@@ -394,9 +611,10 @@ async function poll() {
 
 // ── Render ────────────────────────────────────────────────────────────────────
 
-function renderState(p) {
+function renderState(p, w) {
   const badge = document.getElementById("state-badge");
   const modelEl = document.getElementById("model-name");
+  const lastEl = document.getElementById("last-action");
 
   let label, cls;
   if (!p.running) {
@@ -410,6 +628,11 @@ function renderState(p) {
   badge.textContent = label;
   badge.className = "badge " + cls;
   modelEl.textContent = p.model_name ? p.model_name : "";
+
+  // Show watchdog last_reason if present and not a manual action
+  if (w && w.last_reason) {
+    lastEl.textContent = w.last_reason;
+  }
 }
 
 function renderMetrics(m) {
@@ -435,11 +658,10 @@ function renderMetrics(m) {
 }
 
 function setBar(id, pct, threshold) {
-  const fill = document.getElementById(id + "-bar");
+  const fill   = document.getElementById(id + "-bar");
   const marker = document.getElementById(id + "-threshold-marker");
 
-  const w = Math.min(Math.max(pct, 0), 100);
-  fill.style.width = w + "%";
+  fill.style.width = Math.min(Math.max(pct, 0), 100) + "%";
 
   if (pct >= threshold) {
     fill.className = "bar-fill critical";
@@ -455,9 +677,11 @@ function setBar(id, pct, threshold) {
 // ── Provider section ──────────────────────────────────────────────────────────
 
 function renderProvider(p) {
-  const modelEl = document.getElementById("pv-model");
-  const memEl   = document.getElementById("pv-mem");
-  const ctxEl   = document.getElementById("pv-ctx");
+  const modelEl  = document.getElementById("pv-model");
+  const memEl    = document.getElementById("pv-mem");
+  const ctxEl    = document.getElementById("pv-ctx");
+  const ratioEl  = document.getElementById("layer-ratio");
+
   modelEl.textContent = p.model_loaded ? (p.model_name || "unknown") : "none";
   memEl.textContent   = p.memory_used_mb ? p.memory_used_mb + " MB" : "—";
 
@@ -467,6 +691,17 @@ function renderProvider(p) {
     ctxEl.textContent = ctx ? _fmtCtx(ctx) : "—";
   } else {
     ctxEl.textContent = "—";
+  }
+
+  // CPU/GPU layer memory ratio
+  if (p.model_loaded && p.memory_used_mb && p.size_vram_mb != null) {
+    const gpuMB = p.size_vram_mb;
+    const cpuMB = p.memory_used_mb - gpuMB;
+    ratioEl.textContent = "Layers — CPU: " + cpuMB + " MB · GPU: " + gpuMB + " MB";
+  } else if (p.model_loaded && p.memory_used_mb) {
+    ratioEl.textContent = "Layers — CPU: " + p.memory_used_mb + " MB · GPU: — MB";
+  } else {
+    ratioEl.textContent = "";
   }
 
   // Highlight the currently loaded model in the dropdown
@@ -504,6 +739,7 @@ async function loadModels() {
       sel.appendChild(opt);
     }
     if (prev) sel.value = prev;
+    renderMgmtList(data.models || []);
   } catch (_) { /* non-fatal */ }
 }
 
@@ -528,6 +764,100 @@ async function loadModel() {
     statusEl.textContent = "error: " + e.message;
   } finally {
     btn.disabled = false;
+  }
+}
+
+// ── Model management panel ────────────────────────────────────────────────────
+
+function toggleMgmt() {
+  const header = document.getElementById("mgmt-header");
+  const body   = document.getElementById("mgmt-body");
+  header.classList.toggle("open");
+  body.classList.toggle("open");
+}
+
+function renderMgmtList(models) {
+  const container = document.getElementById("mgmt-model-list");
+  container.textContent = "";   // clear — textContent, not innerHTML
+
+  if (!models.length) {
+    const el = document.createElement("div");
+    el.style.cssText = "color:var(--dim);font-size:11px";
+    el.textContent = "No models installed";
+    container.appendChild(el);
+    return;
+  }
+
+  for (const m of models) {
+    const row = document.createElement("div");
+    row.className = "model-row";
+
+    const info = document.createElement("div");
+    const nameSpan = document.createElement("div");
+    nameSpan.textContent = m.name;
+    const metaSpan = document.createElement("div");
+    metaSpan.className = "model-info";
+    const mb  = m.size_mb ? m.size_mb + " MB" : "";
+    const ctx = m.context_length ? _fmtCtx(m.context_length) : "";
+    metaSpan.textContent = [mb, ctx].filter(Boolean).join(" · ");
+    info.appendChild(nameSpan);
+    info.appendChild(metaSpan);
+
+    const btn = document.createElement("button");
+    btn.className = "btn-sm";
+    btn.textContent = "RM";
+    // Capture model name in closure via dataset — no inline script
+    btn.dataset.model = m.name;
+    btn.addEventListener("click", function() {
+      deleteModel(this.dataset.model);
+    });
+
+    row.appendChild(info);
+    row.appendChild(btn);
+    container.appendChild(row);
+  }
+}
+
+async function deleteModel(name) {
+  if (!confirm("Delete model " + name + " from local storage? This cannot be undone.")) return;
+  try {
+    const r = await apiFetch("/models/" + encodeURIComponent(name), { method: "DELETE" });
+    const data = await r.json();
+    if (data.ok) {
+      await loadModels();
+    } else {
+      alert("Delete failed for " + name);
+    }
+  } catch (e) {
+    alert("Delete error: " + e.message);
+  }
+}
+
+async function pullModel() {
+  const input  = document.getElementById("pull-input");
+  const statusEl = document.getElementById("pull-status");
+  const name = input.value.trim();
+  if (!name) return;
+  if (!confirm("Pull model " + name + "? This may take several minutes.")) return;
+
+  statusEl.textContent = "Pulling " + name + "... (check logs for progress)";
+  input.disabled = true;
+  try {
+    const r = await apiFetch("/models/pull", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: name }),
+    });
+    const data = await r.json();
+    statusEl.textContent = data.ok ? name + " pull complete" : "pull failed";
+    if (data.ok) {
+      input.value = "";
+      await loadModels();
+    }
+  } catch (e) {
+    statusEl.textContent = "pull error: " + e.message;
+  } finally {
+    input.disabled = false;
   }
 }
 
@@ -563,33 +893,38 @@ async function loadConfig() {
     const r = await apiFetch("/config");
     if (!r.ok) return;
     const cfg = await r.json();
-    _thresholds.ram_pause_pct    = cfg.ram_pause_pct    ?? 85;
-    _thresholds.cpu_pause_pct    = cfg.cpu_pause_pct    ?? 90;
+    _thresholds.ram_pause_pct      = cfg.ram_pause_pct      ?? 85;
+    _thresholds.cpu_pause_pct      = cfg.cpu_pause_pct      ?? 90;
     _thresholds.gpu_vram_pause_pct = cfg.gpu_vram_pause_pct ?? 85;
 
     setSlider("sl-ram-pause",  "lbl-ram-pause",  _thresholds.ram_pause_pct);
     setSlider("sl-ram-resume", "lbl-ram-resume", cfg.ram_resume_pct ?? 60);
     setSlider("sl-cpu-pause",  "lbl-cpu-pause",  _thresholds.cpu_pause_pct);
     setSlider("sl-gpu-pause",  "lbl-gpu-pause",  _thresholds.gpu_vram_pause_pct);
+
+    const cb = document.getElementById("cb-auto-resume");
+    if (cb) cb.checked = cfg.auto_resume_on_ram_pressure ?? true;
   } catch (_) { /* ignore — defaults stand */ }
 }
 
 function setSlider(sliderId, labelId, value) {
-  const el = document.getElementById(sliderId);
+  const el  = document.getElementById(sliderId);
   const lbl = document.getElementById(labelId);
   if (el)  el.value = value;
   if (lbl) lbl.textContent = value + "%";
 }
 
 async function saveThresholds() {
+  const cb = document.getElementById("cb-auto-resume");
   const body = {
-    ram_pause_pct:     parseFloat(document.getElementById("sl-ram-pause").value),
-    ram_resume_pct:    parseFloat(document.getElementById("sl-ram-resume").value),
-    cpu_pause_pct:     parseFloat(document.getElementById("sl-cpu-pause").value),
-    gpu_vram_pause_pct: parseFloat(document.getElementById("sl-gpu-pause").value),
+    ram_pause_pct:              parseFloat(document.getElementById("sl-ram-pause").value),
+    ram_resume_pct:             parseFloat(document.getElementById("sl-ram-resume").value),
+    cpu_pause_pct:              parseFloat(document.getElementById("sl-cpu-pause").value),
+    gpu_vram_pause_pct:         parseFloat(document.getElementById("sl-gpu-pause").value),
+    auto_resume_on_ram_pressure: cb ? cb.checked : true,
   };
-  _thresholds.ram_pause_pct     = body.ram_pause_pct;
-  _thresholds.cpu_pause_pct     = body.cpu_pause_pct;
+  _thresholds.ram_pause_pct      = body.ram_pause_pct;
+  _thresholds.cpu_pause_pct      = body.cpu_pause_pct;
   _thresholds.gpu_vram_pause_pct = body.gpu_vram_pause_pct;
 
   try {
@@ -620,6 +955,7 @@ function hideError() {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
+initTheme();
 boot();
 </script>
 </body>
