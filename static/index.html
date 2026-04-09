@@ -684,64 +684,58 @@ function renderState(p, w) {
 function renderMetrics(m) {
   if (!m) return;
 
-  setBar("ram", m.memory.used_pct, _thresholds.ram_pause_pct);
   const _ramTotal = m.memory.total_mb
     ? " of " + (m.memory.total_mb / 1024).toFixed(1) + " GB" : "";
   document.getElementById("ram-value").textContent =
     m.memory.used_pct.toFixed(1) + "%" + _ramTotal + " — " + m.memory.pressure;
 
-  // RAM breakdown: show model segment if we know model memory and total RAM
+  // RAM bar — split into model+other segments when model is loaded, single fill otherwise.
+  // NOTE: never call setBar("ram",...) here — it looks up #ram-bar which may not exist
+  // once we've switched to the segmented layout.
   const p = _lastProvider;
   const legend = document.getElementById("ram-legend");
+  const track = document.getElementById("ram-bar-track");
+  const hasSegments = !!track.querySelector(".bar-seg-model");
+
   if (p && p.model_loaded && p.memory_used_mb && m.memory.total_mb) {
-    const modelPct  = Math.min((p.memory_used_mb / m.memory.total_mb) * 100, 100);
-    const otherPct  = Math.max(m.memory.used_pct - modelPct, 0);
-    const track = document.getElementById("ram-bar-track");
-    // Rebuild segments if not already split
-    if (!track.querySelector(".bar-seg-model")) {
+    const modelPct = Math.min((p.memory_used_mb / m.memory.total_mb) * 100, 100);
+    const otherPct = Math.max(m.memory.used_pct - modelPct, 0);
+    if (!hasSegments) {
       track.innerHTML = "";
       const seg1 = document.createElement("div");
-      seg1.className = "bar-seg-other";
-      seg1.id = "ram-seg-other";
+      seg1.className = "bar-seg-other"; seg1.id = "ram-seg-other";
       const seg2 = document.createElement("div");
-      seg2.className = "bar-seg-model";
-      seg2.id = "ram-seg-model";
+      seg2.className = "bar-seg-model"; seg2.id = "ram-seg-model";
       const marker = document.createElement("div");
-      marker.className = "threshold-marker";
-      marker.id = "ram-threshold-marker";
+      marker.className = "threshold-marker"; marker.id = "ram-threshold-marker";
       marker.style.left = _thresholds.ram_pause_pct + "%";
-      track.appendChild(seg1);
-      track.appendChild(seg2);
-      track.appendChild(marker);
+      track.appendChild(seg1); track.appendChild(seg2); track.appendChild(marker);
     }
-    const seg1 = document.getElementById("ram-seg-other");
-    const seg2 = document.getElementById("ram-seg-model");
-    if (seg1) seg1.style.width = otherPct.toFixed(1) + "%";
-    if (seg2) seg2.style.width = modelPct.toFixed(1) + "%";
+    document.getElementById("ram-seg-other").style.width = otherPct.toFixed(1) + "%";
+    document.getElementById("ram-seg-model").style.width = modelPct.toFixed(1) + "%";
+    document.getElementById("ram-threshold-marker").style.left = _thresholds.ram_pause_pct + "%";
     if (legend) {
       legend.style.display = "flex";
       const pctEl = document.getElementById("ram-legend-pct");
-      if (pctEl) pctEl.textContent =
-        "model " + p.memory_used_mb + " MB (" + modelPct.toFixed(1) + "%)";
+      if (pctEl) pctEl.textContent = "model " + p.memory_used_mb + " MB (" + modelPct.toFixed(1) + "%)";
     }
   } else {
-    // No model loaded — restore single-fill bar
-    const track = document.getElementById("ram-bar-track");
-    if (track.querySelector(".bar-seg-model")) {
+    if (hasSegments) {
       track.innerHTML = "";
       const fill = document.createElement("div");
-      fill.className = "bar-fill";
-      fill.id = "ram-bar";
-      fill.style.width = m.memory.used_pct.toFixed(1) + "%";
+      fill.className = "bar-fill"; fill.id = "ram-bar";
       const marker = document.createElement("div");
-      marker.className = "threshold-marker";
-      marker.id = "ram-threshold-marker";
+      marker.className = "threshold-marker"; marker.id = "ram-threshold-marker";
       marker.style.left = _thresholds.ram_pause_pct + "%";
-      track.appendChild(fill);
-      track.appendChild(marker);
-    } else {
-      setBar("ram", m.memory.used_pct, _thresholds.ram_pause_pct);
+      track.appendChild(fill); track.appendChild(marker);
     }
+    // #ram-bar is guaranteed to exist here
+    const fill = document.getElementById("ram-bar");
+    const pct = m.memory.used_pct;
+    fill.style.width = pct.toFixed(1) + "%";
+    fill.className = "bar-fill" + (pct >= _thresholds.ram_pause_pct ? " critical"
+                                 : pct >= _thresholds.ram_pause_pct * 0.85 ? " warn" : "");
+    document.getElementById("ram-threshold-marker").style.left = _thresholds.ram_pause_pct + "%";
     if (legend) legend.style.display = "none";
   }
 
