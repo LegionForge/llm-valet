@@ -174,24 +174,34 @@ class TestTryAmdSysfs:
         from llm_valet.resources.linux import _try_amd_sysfs
         return _try_amd_sysfs()
 
+    def _mock_path(self, is_file: bool = True, total: int = 0, used: int = 0,
+                   read_exc: Exception | None = None) -> MagicMock:
+        """Build a mock Path class whose instances report the given sysfs values."""
+        def make_instance(path_str: str) -> MagicMock:
+            inst = MagicMock()
+            inst.__str__ = lambda s: path_str
+            inst.is_file.return_value = is_file
+            if read_exc:
+                inst.read_text.side_effect = read_exc
+            elif "total" in path_str:
+                inst.read_text.return_value = str(total)
+            else:
+                inst.read_text.return_value = str(used)
+            return inst
+
+        mock_cls = MagicMock(side_effect=make_instance)
+        return mock_cls
+
     def test_returns_none_when_sysfs_absent(self) -> None:
-        with patch("llm_valet.resources.linux.Path.is_file", return_value=False):
+        with patch("llm_valet.resources.linux.Path", self._mock_path(is_file=False)):
             result = self._call()
         assert result is None
 
     def test_returns_gpu_metrics_from_sysfs(self) -> None:
         total_bytes = 8 * 1024 * 1024 * 1024  # 8 GB
         used_bytes  = 2 * 1024 * 1024 * 1024  # 2 GB
-
-        def mock_read_text(self: Path) -> str:
-            if "total" in str(self):
-                return str(total_bytes)
-            return str(used_bytes)
-
-        with (
-            patch("llm_valet.resources.linux.Path.is_file", return_value=True),
-            patch.object(Path, "read_text", mock_read_text),
-        ):
+        with patch("llm_valet.resources.linux.Path",
+                   self._mock_path(total=total_bytes, used=used_bytes)):
             result = self._call()
 
         assert result is not None
@@ -201,10 +211,8 @@ class TestTryAmdSysfs:
         assert result.vram_used_pct == 25.0
 
     def test_returns_none_on_read_error(self) -> None:
-        with (
-            patch("llm_valet.resources.linux.Path.is_file", return_value=True),
-            patch.object(Path, "read_text", side_effect=OSError("permission denied")),
-        ):
+        with patch("llm_valet.resources.linux.Path",
+                   self._mock_path(read_exc=OSError("permission denied"))):
             result = self._call()
         assert result is None
 

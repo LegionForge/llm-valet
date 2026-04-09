@@ -95,6 +95,9 @@ def _make_test_settings(**overrides: object) -> Settings:
     s = Settings(
         host="127.0.0.1",
         port=8765,
+        # "testserver" is the Host header Starlette TestClient sends by default.
+        # Without it TrustedHostMiddleware returns 400 on every request.
+        extra_allowed_hosts=["testserver"],
         thresholds=ResourceThresholds(check_interval_seconds=300),
     )
     for k, v in overrides.items():
