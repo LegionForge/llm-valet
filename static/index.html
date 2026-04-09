@@ -237,6 +237,13 @@
     padding: 1px 6px;
     border-radius: 2px;
   }
+  .provider-endpoint { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--dim); margin-bottom: 8px; }
+  #pv-endpoint { color: var(--text); font-family: monospace; }
+  .pv-status-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+  .pv-status-dot.up   { background: var(--green); }
+  .pv-status-dot.down { background: var(--red); }
+  #pv-status-text.up   { color: var(--green); }
+  #pv-status-text.down { color: var(--red); }
   .provider-stats { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 6px; }
   .provider-stat { font-size: 12px; color: var(--dim); }
   .provider-stat span { color: var(--text); }
@@ -364,6 +371,11 @@
   <div class="provider-header">
     <div class="section-title" style="margin-bottom:0">Provider</div>
     <span class="provider-badge" id="provider-badge">OLLAMA</span>
+  </div>
+  <div class="provider-endpoint" id="pv-endpoint-row">
+    <span id="pv-endpoint">—</span>
+    <span class="pv-status-dot" id="pv-status-dot"></span>
+    <span id="pv-status-text">—</span>
   </div>
   <div class="provider-stats">
     <div class="provider-stat">Loaded: <span id="pv-model">—</span></div>
@@ -778,6 +790,16 @@ function renderProvider(p) {
   const memEl    = document.getElementById("pv-mem");
   const ctxEl    = document.getElementById("pv-ctx");
   const ratioEl  = document.getElementById("layer-ratio");
+
+  // Endpoint + connectivity status
+  const epEl   = document.getElementById("pv-endpoint");
+  const dotEl  = document.getElementById("pv-status-dot");
+  const txtEl  = document.getElementById("pv-status-text");
+  if (p.endpoint) { epEl.textContent = p.endpoint; }
+  const up = p.running;
+  dotEl.className = "pv-status-dot " + (up ? "up" : "down");
+  txtEl.textContent = up ? "Listening" : "Offline";
+  txtEl.className   = up ? "up" : "down";
 
   modelEl.textContent = p.model_loaded ? (p.model_name || "unknown") : "none";
   memEl.textContent   = p.memory_used_mb ? p.memory_used_mb + " MB" : "—";

@@ -189,7 +189,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         provider_status: ProviderStatus = await p.status()
         metrics: SystemMetrics = c.collect()
         return {
-            "provider": provider_status.__dict__,
+            "provider": {
+                **provider_status.__dict__,
+                "endpoint": settings.ollama_url,
+            },
             "metrics": _metrics_to_dict(metrics),
             "watchdog": {"state": w.state.value, "last_reason": w.last_reason},
             "version": _VERSION,
