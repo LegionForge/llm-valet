@@ -86,16 +86,52 @@ llm_valet/
 
 | Method | Path | Action |
 |---|---|---|
-| GET | `/status` | Provider state + current resource snapshot |
+| GET | `/status` | Provider state + current resource snapshot + watchdog last_reason |
+| GET | `/watchdog` | Watchdog state + last transition reason |
 | GET | `/metrics` | Live `SystemMetrics` from `ResourceCollector` |
 | POST | `/pause` | Manual pause |
 | POST | `/resume` | Manual resume |
+| POST | `/load` | Load a specific model (unloads current first) |
+| GET | `/models` | List all locally available models |
+| DELETE | `/models/{name}` | Delete a model from local storage |
+| POST | `/models/pull` | Pull (download) a model — blocks until complete |
 | POST | `/start` | Full service start |
 | POST | `/stop` | Graceful service shutdown |
 | POST | `/restart` | stop → sleep(2) → start |
 | GET | `/config` | Read current thresholds + watchdog settings |
 | PUT | `/config` | Update thresholds at runtime (persisted to config.yaml) |
 | GET | `/docs` | Auto-generated OpenAPI docs |
+
+---
+
+## Tuning RAM Thresholds
+
+The default `ram_pause_pct` is **85%**. On machines where the LLM model takes up a significant fraction of RAM, this may be too high — the model already holds the RAM and the watchdog never triggers.
+
+**Rule of thumb by model size on 16 GB RAM:**
+
+| Model | RAM estimate | Suggested `ram_pause_pct` |
+|---|---|---|
+| 3B (Q4) | ~2 GB (12%) | 70–75% |
+| 7B (Q4) | ~5 GB (31%) | 65–70% |
+| 13B (Q4) | ~8 GB (50%) | 60–65% |
+| 30B (Q4) | ~18 GB (>100%) | N/A — use GPU offloading |
+
+On **Apple Silicon (M-series)**, CPU and GPU share unified memory. Ollama may offload layers to GPU to fit a model; the CPU/GPU layer ratio shown in the WebUI (and in `/status` as `size_vram_mb`) shows how much of the model is in each pool. Raise `ram_pause_pct` only if you have confirmed headroom above the model's footprint.
+
+**Hysteresis:** `ram_resume_pct` must be lower than `ram_pause_pct`. The gap between them is the "dead zone" — values in this band neither trigger a pause nor allow a resume. A gap of 20–25% prevents rapid oscillation. Example: pause at 80%, resume only below 60%.
+
+---
+
+## WebUI Refresh Rate
+
+The dashboard polls `/status` on a configurable interval (default 5 seconds). To change it:
+
+- Drag the **Refresh rate** slider in the Thresholds section (5–60 seconds)
+- The setting is saved to `localStorage` and persists across sessions
+- Shorter intervals give faster feedback but add more HTTP polling overhead
+
+For machines on battery or with constrained CPUs, 15–30s is a reasonable default.
 
 ---
 
