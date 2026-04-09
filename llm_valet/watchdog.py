@@ -45,6 +45,7 @@ class Watchdog:
         self._paused_at: float | None = None
         self._running = False
         self._last_reason: str = ""         # reason string from last state transition
+        self._pause_trigger: str = ""       # "ram" | "cpu" | "gpu" | "game" | ""
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -91,6 +92,7 @@ class Watchdog:
         self._state = WatchdogState.RUNNING
         self._paused_at = None
         self._last_reason = "manual resume"
+        self._pause_trigger = ""
         logger.info("watchdog state synced — manual resume")
 
     # ── Tick ──────────────────────────────────────────────────────────────────
@@ -121,6 +123,17 @@ class Watchdog:
         reason = game_reason or resource_reason
 
         if self._state == WatchdogState.RUNNING and should_pause:
+            # Record what triggered this pause for resume-gating logic
+            if game_detected:
+                self._pause_trigger = "game"
+            elif "RAM" in resource_reason:
+                self._pause_trigger = "ram"
+            elif "CPU" in resource_reason:
+                self._pause_trigger = "cpu"
+            elif "GPU" in resource_reason:
+                self._pause_trigger = "gpu"
+            else:
+                self._pause_trigger = "unknown"
             await self._transition_to_paused(reason)
 
         elif self._state == WatchdogState.PAUSED and not should_pause:
@@ -128,6 +141,18 @@ class Watchdog:
             grace = self._thresholds.pause_timeout_seconds
             elapsed = time.monotonic() - (self._paused_at or 0)
             safe_to_resume, resume_reason = self._engine.evaluate_resume(metrics)
+
+            # When auto_resume_on_ram_pressure is False, RAM-triggered pauses
+            # require manual /resume — prevents model-eviction oscillation.
+            if (
+                self._pause_trigger == "ram"
+                and not self._thresholds.auto_resume_on_ram_pressure
+            ):
+                logger.debug(
+                    "auto-resume suppressed — RAM-triggered pause requires manual /resume",
+                    extra={"auto_resume_on_ram_pressure": False},
+                )
+                return
 
             if safe_to_resume and elapsed >= grace:
                 await self._transition_to_running(resume_reason)

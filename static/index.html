@@ -454,6 +454,16 @@
              onchange="applyRefreshRate()">
     </div>
   </div>
+  <div style="margin-top:14px;font-size:12px;display:flex;align-items:center;gap:8px">
+    <input type="checkbox" id="cb-auto-resume" checked onchange="saveThresholds()"
+           style="accent-color:var(--accent);cursor:pointer;width:14px;height:14px">
+    <label for="cb-auto-resume" style="color:var(--dim);cursor:pointer">
+      Auto-resume after RAM pressure clears
+      <span style="color:var(--dim);font-size:10px">
+        (uncheck to prevent oscillation when model fills RAM)
+      </span>
+    </label>
+  </div>
 </section>
 
 <hr>
@@ -891,6 +901,9 @@ async function loadConfig() {
     setSlider("sl-ram-resume", "lbl-ram-resume", cfg.ram_resume_pct ?? 60);
     setSlider("sl-cpu-pause",  "lbl-cpu-pause",  _thresholds.cpu_pause_pct);
     setSlider("sl-gpu-pause",  "lbl-gpu-pause",  _thresholds.gpu_vram_pause_pct);
+
+    const cb = document.getElementById("cb-auto-resume");
+    if (cb) cb.checked = cfg.auto_resume_on_ram_pressure ?? true;
   } catch (_) { /* ignore — defaults stand */ }
 }
 
@@ -902,11 +915,13 @@ function setSlider(sliderId, labelId, value) {
 }
 
 async function saveThresholds() {
+  const cb = document.getElementById("cb-auto-resume");
   const body = {
-    ram_pause_pct:      parseFloat(document.getElementById("sl-ram-pause").value),
-    ram_resume_pct:     parseFloat(document.getElementById("sl-ram-resume").value),
-    cpu_pause_pct:      parseFloat(document.getElementById("sl-cpu-pause").value),
-    gpu_vram_pause_pct: parseFloat(document.getElementById("sl-gpu-pause").value),
+    ram_pause_pct:              parseFloat(document.getElementById("sl-ram-pause").value),
+    ram_resume_pct:             parseFloat(document.getElementById("sl-ram-resume").value),
+    cpu_pause_pct:              parseFloat(document.getElementById("sl-cpu-pause").value),
+    gpu_vram_pause_pct:         parseFloat(document.getElementById("sl-gpu-pause").value),
+    auto_resume_on_ram_pressure: cb ? cb.checked : true,
   };
   _thresholds.ram_pause_pct      = body.ram_pause_pct;
   _thresholds.cpu_pause_pct      = body.cpu_pause_pct;
