@@ -90,6 +90,9 @@ def _make_mock_collector() -> MagicMock:
     return c
 
 
+_TEST_API_KEY = "test-api-key"
+
+
 def _make_test_settings(**overrides: object) -> Settings:
     """Settings that point to localhost with a very long watchdog interval."""
     s = Settings(
@@ -98,6 +101,9 @@ def _make_test_settings(**overrides: object) -> Settings:
         # "testserver" is the Host header Starlette TestClient sends by default.
         # Without it TrustedHostMiddleware returns 400 on every request.
         extra_allowed_hosts=["testserver"],
+        # TestClient always reports client host as "testclient" (not 127.0.0.1),
+        # so set an api_key and inject it via _AuthClient on every request.
+        api_key=_TEST_API_KEY,
         thresholds=ResourceThresholds(check_interval_seconds=300),
     )
     for k, v in overrides.items():
@@ -105,16 +111,47 @@ def _make_test_settings(**overrides: object) -> Settings:
     return s
 
 
+class _AuthClient:
+    """
+    Thin wrapper around TestClient that injects X-API-Key on every request.
+
+    Starlette's TestClient always reports request.client.host as "testclient",
+    not "127.0.0.1", so the localhost auth bypass never fires. Setting an
+    api_key in test settings + injecting it here is the clean alternative
+    to patching internals or modifying production auth code.
+    """
+
+    def __init__(self, tc: TestClient) -> None:
+        self._tc = tc
+
+    def _headers(self, kw: dict) -> dict:
+        h = dict(kw.pop("headers", {}) or {})
+        h["X-API-Key"] = _TEST_API_KEY
+        return h
+
+    def get(self, url: str, **kw: object):
+        return self._tc.get(url, headers=self._headers(kw), **kw)
+
+    def post(self, url: str, **kw: object):
+        return self._tc.post(url, headers=self._headers(kw), **kw)
+
+    def put(self, url: str, **kw: object):
+        return self._tc.put(url, headers=self._headers(kw), **kw)
+
+    def delete(self, url: str, **kw: object):
+        return self._tc.delete(url, headers=self._headers(kw), **kw)
+
+
 # ── Fixture ───────────────────────────────────────────────────────────────────
 
 @pytest.fixture()
 def api(request: pytest.FixtureRequest):
     """
-    Yields (TestClient, mock_provider, mock_collector).
+    Yields (_AuthClient, mock_provider, mock_collector).
 
-    Pass a 'status' marker to override the ProviderStatus returned by the mock:
-        @pytest.mark.parametrize("status", [_make_provider_status(running=False)])
-    or override in the test directly via mock_provider.status.return_value = ...
+    _AuthClient wraps TestClient and injects X-API-Key on every request so
+    the auth middleware passes even though TestClient reports client host as
+    "testclient" rather than "127.0.0.1".
     """
     mock_provider  = _make_mock_provider()
     mock_collector = _make_mock_collector()
@@ -129,8 +166,8 @@ def api(request: pytest.FixtureRequest):
     ):
         app = create_app(settings)
 
-    with TestClient(app, base_url="http://127.0.0.1:8765", raise_server_exceptions=True) as client:
-        yield client, mock_provider, mock_collector
+    with TestClient(app, raise_server_exceptions=True) as tc:
+        yield _AuthClient(tc), mock_provider, mock_collector
 
 
 # ── GET /status ───────────────────────────────────────────────────────────────
@@ -426,14 +463,14 @@ class TestGetMetrics:
 # ── Authentication ────────────────────────────────────────────────────────────
 
 class TestAuth:
-    def test_localhost_no_key_allowed(self, api: tuple) -> None:
-        """TestClient uses 127.0.0.1 by default — no API key required."""
+    def test_correct_api_key_allowed(self, api: tuple) -> None:
+        """_AuthClient injects the correct test key — requests succeed."""
         client, _, _ = api
         r = client.get("/status")
         assert r.status_code == 200
 
-    def test_api_key_required_for_non_localhost(self) -> None:
-        """When api_key is set, a wrong key from a non-local host → 401."""
+    def test_wrong_api_key_returns_401(self) -> None:
+        """Correct api_key set in settings but wrong key in header → 401."""
         mock_provider  = _make_mock_provider()
         mock_collector = _make_mock_collector()
         settings = _make_test_settings(api_key="secret")
@@ -448,8 +485,5 @@ class TestAuth:
             app = create_app(settings)
 
         with TestClient(app, raise_server_exceptions=False) as client:
-            # Simulate a non-localhost request by overriding the client IP via ASGI scope
-            # TestClient always reports 127.0.0.1, so we test the key check directly
-            # by accessing /status with correct key (should succeed from localhost)
-            r = client.get("/status", headers={"X-API-Key": "secret"})
-            assert r.status_code == 200
+            r = client.get("/status", headers={"X-API-Key": "wrong-key"})
+            assert r.status_code == 401
