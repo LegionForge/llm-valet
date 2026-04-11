@@ -3,6 +3,7 @@ import logging
 import logging.handlers
 import os
 import sys
+import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -23,6 +24,28 @@ from llm_valet.watchdog import Watchdog
 logger = logging.getLogger(__name__)
 
 _VERSION = "0.2.0"
+
+
+class _RateLimiter:
+    """
+    Simple per-key time-based cooldown — prevents loop scripts from hammering
+    destructive endpoints (/stop, /start, /restart, /models/pull).
+    Single-worker only; not safe for multi-process deployments.
+    """
+
+    def __init__(self) -> None:
+        self._last: dict[str, float] = {}
+
+    def check(self, key: str, min_interval: float) -> None:
+        """Raise HTTP 429 if key was called within min_interval seconds."""
+        now = time.monotonic()
+        elapsed = now - self._last.get(key, 0.0)
+        if elapsed < min_interval:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Too many requests — wait {min_interval - elapsed:.1f}s",
+            )
+        self._last[key] = now
 
 # ── Startup guards ────────────────────────────────────────────────────────────
 
@@ -90,6 +113,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     provider = _build_provider(settings)
     collector = _build_collector(settings)
     watchdog = Watchdog(provider, collector, settings.thresholds)
+    rate_limiter = _RateLimiter()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
@@ -125,9 +149,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # ── Security middleware ───────────────────────────────────────────────────
 
+    # T2 — DNS rebinding: reject any Host header not in the allowlist.
+    # Without this a malicious page can rebind DNS to 127.0.0.1 and reach the API.
     allowed_hosts = ["localhost", "127.0.0.1", "*.local", *settings.extra_allowed_hosts]
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts)
 
+    # T3 — CORS wildcard prevention: allow_origins is config-only, never "*".
+    # Cross-origin JS cannot reach the API unless an explicit origin is listed in config.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(settings.cors_origins),  # empty by default — never "*"
@@ -196,6 +224,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "metrics": _metrics_to_dict(metrics),
             "watchdog": {"state": w.state.value, "last_reason": w.last_reason},
             "version": _VERSION,
+            # Expose bind posture so the WebUI can warn when LAN-exposed without auth
+            "security": {
+                "lan_exposed": settings.host not in ("127.0.0.1", "::1", "localhost"),
+                "auth_enabled": bool(settings.api_key),
+            },
         }
 
     @app.get("/watchdog")
@@ -278,13 +311,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def pull_model(
         _: Auth,
         p: Annotated[LLMProvider, Depends(get_provider)],
+        c: Annotated[ResourceCollector, Depends(get_collector)],
         request: Request,
     ) -> dict[str, Any]:
         """Pull (download) a model from the registry. Blocks until complete."""
+        rate_limiter.check("pull", 5.0)
         body = await request.json()
         model_name = body.get("model", "")
         if not isinstance(model_name, str) or not model_name:
             raise HTTPException(status_code=422, detail="model field required")
+        # Guard against disk exhaustion — large models can fill the drive mid-download
+        # and corrupt Ollama's model index. Require at least 5 GB free before starting.
+        disk = c.collect().disk
+        _MIN_FREE_MB = 5 * 1024
+        if disk.free_mb < _MIN_FREE_MB:
+            raise HTTPException(
+                status_code=507,
+                detail=f"Insufficient disk space — {disk.free_mb} MB free, {_MIN_FREE_MB} MB required",
+            )
         success = await p.pull_model(model_name)
         return {"ok": success, "action": "pull", "model": model_name}
 
@@ -295,6 +339,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         background_tasks: BackgroundTasks,
     ) -> dict[str, Any]:
         """Full service start — returns immediately; poll /status for result."""
+        rate_limiter.check("start", 3.0)
         background_tasks.add_task(p.start)
         return {"ok": True, "action": "start"}
 
@@ -305,6 +350,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         background_tasks: BackgroundTasks,
     ) -> dict[str, Any]:
         """Graceful service shutdown — returns immediately; poll /status for result."""
+        rate_limiter.check("stop", 3.0)
         background_tasks.add_task(p.stop)
         return {"ok": True, "action": "stop"}
 
@@ -315,6 +361,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         background_tasks: BackgroundTasks,
     ) -> dict[str, Any]:
         """stop → 2s delay → start — returns immediately; poll /status for result."""
+        rate_limiter.check("restart", 3.0)
         async def _restart() -> None:
             await p.stop()
             await asyncio.sleep(2)

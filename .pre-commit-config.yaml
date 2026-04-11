@@ -41,3 +41,11 @@ repos:
           - httpx
           - psutil
           - uvicorn
+
+  # ── Gitleaks — secret scanning ────────────────────────────────────────────────
+  # Catches API keys, tokens, and credentials before they reach the remote.
+  # If a false positive triggers, add to .gitleaksignore — do NOT skip the hook.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.24.0
+    hooks:
+      - id: gitleaks
