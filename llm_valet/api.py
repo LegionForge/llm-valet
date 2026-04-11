@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse
@@ -22,6 +22,7 @@ from llm_valet.watchdog import Watchdog
 
 logger = logging.getLogger(__name__)
 
+_VERSION = "0.2.0"
 
 # ── Startup guards ────────────────────────────────────────────────────────────
 
@@ -118,7 +119,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(
         title="llm-valet",
         description="LLM lifecycle manager — pause/resume based on resource pressure and gaming detection",  # noqa: E501
-        version="0.2.0",
+        version=_VERSION,
         lifespan=lifespan,
     )
 
@@ -188,9 +189,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         provider_status: ProviderStatus = await p.status()
         metrics: SystemMetrics = c.collect()
         return {
-            "provider": provider_status.__dict__,
+            "provider": {
+                **provider_status.__dict__,
+                "endpoint": settings.ollama_url,
+            },
             "metrics": _metrics_to_dict(metrics),
             "watchdog": {"state": w.state.value, "last_reason": w.last_reason},
+            "version": _VERSION,
         }
 
     @app.get("/watchdog")
@@ -287,30 +292,35 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def post_start(
         _: Auth,
         p: Annotated[LLMProvider, Depends(get_provider)],
+        background_tasks: BackgroundTasks,
     ) -> dict[str, Any]:
-        """Full service start."""
-        success = await p.start()
-        return {"ok": success, "action": "start"}
+        """Full service start — returns immediately; poll /status for result."""
+        background_tasks.add_task(p.start)
+        return {"ok": True, "action": "start"}
 
     @app.post("/stop")
     async def post_stop(
         _: Auth,
         p: Annotated[LLMProvider, Depends(get_provider)],
+        background_tasks: BackgroundTasks,
     ) -> dict[str, Any]:
-        """Graceful service shutdown — unload model, then stop service."""
-        success = await p.stop()
-        return {"ok": success, "action": "stop"}
+        """Graceful service shutdown — returns immediately; poll /status for result."""
+        background_tasks.add_task(p.stop)
+        return {"ok": True, "action": "stop"}
 
     @app.post("/restart")
     async def post_restart(
         _: Auth,
         p: Annotated[LLMProvider, Depends(get_provider)],
+        background_tasks: BackgroundTasks,
     ) -> dict[str, Any]:
-        """stop → 2s delay → start."""
-        stop_ok = await p.stop()
-        await asyncio.sleep(2)
-        start_ok = await p.start()
-        return {"ok": stop_ok and start_ok, "action": "restart"}
+        """stop → 2s delay → start — returns immediately; poll /status for result."""
+        async def _restart() -> None:
+            await p.stop()
+            await asyncio.sleep(2)
+            await p.start()
+        background_tasks.add_task(_restart)
+        return {"ok": True, "action": "restart"}
 
     @app.get("/config")
     async def get_config(_: Auth) -> dict[str, Any]:

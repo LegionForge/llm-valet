@@ -16,10 +16,17 @@ logger = logging.getLogger(__name__)
 
 # ── Ollama install paths ──────────────────────────────────────────────────────
 
-_APP_BUNDLE       = Path("/Applications/Ollama.app")
-_APP_EXECUTABLE   = _APP_BUNDLE / "Contents/MacOS/Ollama"
-_BREW_PLIST_LABEL = "com.ollama.ollama"
-_BREW_PLIST_PATH  = Path("~/Library/LaunchAgents/com.ollama.ollama.plist").expanduser()
+_APP_BUNDLE     = Path("/Applications/Ollama.app")
+_APP_EXECUTABLE = _APP_BUNDLE / "Contents/MacOS/Ollama"
+
+# Brew formula plist names — older versions used com.ollama.ollama, newer
+# homebrew formula uses homebrew.mxcl.ollama.  Check both.
+_BREW_VARIANTS = [
+    ("homebrew.mxcl.ollama",
+     Path("~/Library/LaunchAgents/homebrew.mxcl.ollama.plist").expanduser()),
+    ("com.ollama.ollama",
+     Path("~/Library/LaunchAgents/com.ollama.ollama.plist").expanduser()),
+]
 
 
 # ── Public interface ──────────────────────────────────────────────────────────
@@ -30,7 +37,8 @@ def start_service() -> bool:
     if variant == "app":
         return _open_app()
     if variant == "brew":
-        return _launchctl("bootstrap", _BREW_PLIST_LABEL, plist=_BREW_PLIST_PATH)
+        label, plist = _brew_plist()
+        return _launchctl("bootstrap", label, plist=plist)
     logger.error("Ollama not found — cannot start service")
     return False
 
@@ -41,7 +49,8 @@ def stop_service() -> bool:
     if variant == "app":
         return _quit_app()
     if variant == "brew":
-        return _launchctl("bootout", _BREW_PLIST_LABEL, plist=_BREW_PLIST_PATH)
+        label, _ = _brew_plist()
+        return _launchctl("bootout", label)
     logger.warning("Ollama not found — stop_service is a no-op")
     return True
 
@@ -59,12 +68,22 @@ def is_installed() -> bool:
 
 # ── Variant detection ─────────────────────────────────────────────────────────
 
+def _brew_plist() -> tuple[str, Path]:
+    """Return (label, plist_path) for whichever brew plist variant is present."""
+    for label, plist in _BREW_VARIANTS:
+        if plist.is_file():
+            return label, plist
+    # Fall back to first entry — launchctl will error meaningfully
+    return _BREW_VARIANTS[0]
+
+
 def _detect_variant() -> str | None:
     """Return 'app', 'brew', or None."""
     if _APP_BUNDLE.is_dir():
         return "app"
-    if _BREW_PLIST_PATH.is_file():
-        return "brew"
+    for _, plist in _BREW_VARIANTS:
+        if plist.is_file():
+            return "brew"
     return None
 
 
