@@ -91,6 +91,8 @@
   .security-badge.safe { color: var(--dim);   border: 1px solid var(--border); }
   .security-badge.ok   { color: var(--yellow); border: 1px solid var(--yellow); }
   .security-badge.warn { color: var(--red);    border: 1px solid var(--red);    }
+  .security-badge a { color: inherit; text-decoration: none; opacity: 0.8; margin-left: 4px; }
+  .security-badge a:hover { text-decoration: underline; opacity: 1; }
 
   /* ── Section ─────────────────────────────────────────────────────────────── */
   section { margin-bottom: 0; }
@@ -687,17 +689,43 @@ async function poll() {
 function renderSecurityBadge(sec) {
   const el = document.getElementById("security-badge");
   if (!el) return;
+
+  let text, cls, tooltip, searchUrl;
+
   if (sec.lan_exposed && !sec.auth_enabled) {
-    el.textContent = "⚠ LAN EXPOSED — NO AUTH";
-    el.className = "security-badge warn";
+    text      = "⚠ Visible on your network — no protection";
+    cls       = "security-badge warn";
+    tooltip   = "llm-valet is reachable by anyone on your local network and has no API key set. Anyone nearby could pause, stop, or control your LLM service. Set an api_key in config.yaml to protect it.";
+    searchUrl = "https://duckduckgo.com/?q=local+network+service+no+authentication+security+risk";
   } else if (sec.lan_exposed) {
-    el.textContent = "LAN EXPOSED — AUTH ACTIVE";
-    el.className = "security-badge ok";
+    text      = "Visible on your network — API key required";
+    cls       = "security-badge ok";
+    tooltip   = "llm-valet is reachable by other devices on your local network. An API key is required for access, so it is protected from unauthorized use. This is normal if you set host: 0.0.0.0 intentionally.";
+    searchUrl = "https://duckduckgo.com/?q=local+network+LAN+exposure+security+best+practices";
   } else {
-    el.textContent = "LOCALHOST ONLY";
-    el.className = "security-badge safe";
+    text      = "Local access only";
+    cls       = "security-badge safe";
+    tooltip   = "llm-valet only accepts connections from this machine. It is not reachable from other devices on your network.";
+    searchUrl = null;
   }
-  el.style.display = "block";   // textContent only — no innerHTML
+
+  // Rebuild children without innerHTML — createTextNode prevents XSS if text ever includes user data
+  while (el.firstChild) el.removeChild(el.firstChild);
+  el.className = cls;
+  el.title = tooltip;
+  el.appendChild(document.createTextNode(text));
+
+  if (searchUrl) {
+    const link = document.createElement("a");
+    link.href = searchUrl;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = " ⓘ";
+    link.setAttribute("aria-label", "Learn more about this security status (opens DuckDuckGo search)");
+    el.appendChild(link);
+  }
+
+  el.style.display = "block";
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
