@@ -436,6 +436,21 @@ curl -H "X-API-Key: your-key" -X POST http://mac-mini.local:8765/pause
 - **Config:** `~/.llm-valet/config.yaml`; permissions enforced to `0600`
 - **Service level:** User-level only; never requires root
 
+## Code Comment Standard
+
+A comment is required when any of the following cannot be recovered by reading the code alone:
+
+- **Why** — the reason a choice was made, especially when the obvious alternative was intentionally rejected
+- **Constraint** — something that must survive refactoring: security mitigation, compliance requirement, platform limitation
+- **Contract** — a precondition, postcondition, or idempotency guarantee that a caller depends on
+- **Workaround** — behavior that looks wrong but is correct due to an external API quirk, OS behavior, or versioned dependency
+- **Intentional absence** — code that is deliberately not present and must stay absent
+
+Do not comment on *what* the code does — only on what the code *cannot say about itself*.
+If the comment would read as a translation of the code into English, delete it.
+
+---
+
 ## Parked Features (Do Not Implement Yet)
 
 - **Provider auto-update** — detecting/installing new Ollama/LM Studio releases. Silent auto-updates on a shared machine are risky; UI-prompted installs add significant complexity. When revisited: `updater.py`, mandatory user confirmation before any download.

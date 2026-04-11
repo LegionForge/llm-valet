@@ -1,9 +1,11 @@
+import ipaddress
 import logging
 import os
 import stat
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import yaml
 
@@ -12,6 +14,35 @@ from llm_valet.resources.base import ResourceThresholds
 logger = logging.getLogger(__name__)
 
 _CONFIG_PATH = Path("~/.llm-valet/config.yaml").expanduser()
+
+# RFC1918 + loopback — the only address space a local provider can legitimately occupy.
+# Prevents SSRF via ollama_url: attacker redirecting to cloud metadata or internal services (T6).
+_SAFE_PROVIDER_NETS = [
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+]
+
+
+def _validate_provider_url(url: str) -> bool:
+    """Return True only if url targets localhost or an RFC1918 address."""
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            return False
+        host = parsed.hostname or ""
+        if not host:
+            return False
+        if host in ("localhost", "::1"):
+            return True
+        if host.endswith(".local"):
+            # .local mDNS — LAN Ollama on another machine; acceptable
+            return True
+        addr = ipaddress.ip_address(host)
+        return any(addr in net for net in _SAFE_PROVIDER_NETS)
+    except (ValueError, Exception):
+        return False
 
 
 @dataclass
@@ -64,9 +95,19 @@ def load_settings() -> Settings:
 
 
 def _apply_yaml(settings: Settings, raw: dict[str, Any]) -> None:
-    for key in ("host", "port", "provider", "ollama_url", "model_name", "api_key", "log_file"):
+    for key in ("host", "port", "provider", "model_name", "api_key", "log_file"):
         if key in raw:
             setattr(settings, key, raw[key])
+
+    if "ollama_url" in raw:
+        url = str(raw["ollama_url"])
+        if _validate_provider_url(url):
+            settings.ollama_url = url
+        else:
+            logger.warning(
+                "ollama_url rejected — must be http(s) to localhost or RFC1918 address",
+                extra={"url": url},
+            )
 
     if "cors_origins" in raw:
         settings.cors_origins = [str(x) for x in raw["cors_origins"]]
