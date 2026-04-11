@@ -552,6 +552,7 @@ let _refreshMs = 5000;
 let _lastProvider = null;   // last known provider state from poll
 let _lastWatchdog = null;   // last known watchdog state from poll
 let _pendingAction = null;  // "stopping"|"starting"|"restarting" while async op in flight
+const _draggingSliders = new Set();  // slider IDs currently held by the user — skip sync while dragging
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
 
@@ -624,6 +625,7 @@ async function apiFetch(path, options) {
 
 async function boot() {
   initRefreshRate();
+  initSliderDragTracking();
   await loadConfig();
   await loadModels();
   await poll();
@@ -654,9 +656,12 @@ function applyRefreshRate() {
 
 async function poll() {
   try {
-    const r = await apiFetch("/status");
+    // Fetch status and config in parallel — config sync keeps sliders consistent
+    // across multiple open browser tabs without requiring a manual page reload.
+    const [r, cfgR] = await Promise.all([apiFetch("/status"), apiFetch("/config")]);
     if (!r.ok) throw new Error("HTTP " + r.status);
     const data = await r.json();
+    if (cfgR.ok) syncConfigSliders(await cfgR.json());
     hideError();
 
     // Capture before renderState() clears _pendingAction — used for model reload below
@@ -1112,6 +1117,31 @@ function renderControls(p, w) {
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
+function initSliderDragTracking() {
+  // Mark a slider as being dragged on input; clear on change (release).
+  // setSlider() skips updates for any slider in _draggingSliders so a poll
+  // tick mid-drag doesn't snap the thumb back.
+  ["sl-ram-pause", "sl-ram-resume", "sl-cpu-pause", "sl-gpu-pause", "sl-refresh"].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener("input",  () => _draggingSliders.add(id));
+    el.addEventListener("change", () => _draggingSliders.delete(id));
+  });
+}
+
+function syncConfigSliders(cfg) {
+  // Called on every poll tick. setSlider is a no-op for sliders currently dragged.
+  setSlider("sl-ram-pause",  "lbl-ram-pause",  cfg.ram_pause_pct      ?? _thresholds.ram_pause_pct);
+  setSlider("sl-ram-resume", "lbl-ram-resume", cfg.ram_resume_pct     ?? 60);
+  setSlider("sl-cpu-pause",  "lbl-cpu-pause",  cfg.cpu_pause_pct      ?? _thresholds.cpu_pause_pct);
+  setSlider("sl-gpu-pause",  "lbl-gpu-pause",  cfg.gpu_vram_pause_pct ?? _thresholds.gpu_vram_pause_pct);
+  _thresholds.ram_pause_pct      = cfg.ram_pause_pct      ?? _thresholds.ram_pause_pct;
+  _thresholds.cpu_pause_pct      = cfg.cpu_pause_pct      ?? _thresholds.cpu_pause_pct;
+  _thresholds.gpu_vram_pause_pct = cfg.gpu_vram_pause_pct ?? _thresholds.gpu_vram_pause_pct;
+  const cb = document.getElementById("cb-auto-resume");
+  if (cb) cb.checked = cfg.auto_resume_on_ram_pressure ?? true;
+}
+
 async function loadConfig() {
   try {
     const r = await apiFetch("/config");
@@ -1132,6 +1162,7 @@ async function loadConfig() {
 }
 
 function setSlider(sliderId, labelId, value) {
+  if (_draggingSliders.has(sliderId)) return;  // don't override while user is mid-drag
   const el  = document.getElementById(sliderId);
   const lbl = document.getElementById(labelId);
   if (el)  el.value = value;
