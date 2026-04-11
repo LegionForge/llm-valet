@@ -345,10 +345,10 @@
   <h1>llm-valet</h1>
   <div class="header-actions">
     <span id="version-badge" style="font-size:10px;color:var(--dim);align-self:center;letter-spacing:0.04em"></span>
-    <button class="icon-btn" title="Refresh" onclick="poll()">↺</button>
-    <button class="icon-btn" id="theme-btn" title="Toggle light/dark mode" onclick="toggleTheme()">◑</button>
+    <button class="icon-btn" title="Fetch latest status immediately without waiting for the next auto-refresh" aria-label="Refresh now" onclick="poll()">↺</button>
+    <button class="icon-btn" id="theme-btn" title="Toggle between dark and light display mode" aria-label="Toggle light/dark mode" onclick="toggleTheme()">◑</button>
     <a href="https://github.com/LegionForge/llm-valet#readme" target="_blank" rel="noopener">
-      <button class="icon-btn" title="Help / README">?</button>
+      <button class="icon-btn" title="Open the llm-valet README and documentation on GitHub" aria-label="Help / README">?</button>
     </a>
   </div>
 </div>
@@ -399,10 +399,14 @@
   </div>
   <div class="layer-ratio" id="layer-ratio"></div>
   <div class="model-select-row">
-    <select id="model-select">
+    <select id="model-select"
+            title="Choose a model to load into memory. Only models already downloaded to this machine are listed. Use Model Management below to pull new ones."
+            aria-label="Select model to load">
       <option value="">— select model —</option>
     </select>
-    <button id="btn-load" onclick="loadModel()">LOAD</button>
+    <button id="btn-load" onclick="loadModel()"
+            title="Load the selected model into memory so it can serve requests. RAM usage will increase. The model stays loaded until you PAUSE or STOP."
+            aria-label="Load selected model">LOAD</button>
   </div>
   <div class="load-status" id="load-status"></div>
 </section>
@@ -480,36 +484,48 @@
     <div class="slider-item">
       <label>RAM pause <span id="lbl-ram-pause">85%</span></label>
       <input type="range" id="sl-ram-pause" min="50" max="98" value="85"
+             title="Watchdog pauses the model when RAM exceeds this percentage. Set this above your model's loaded RAM footprint to avoid oscillation (e.g. 8 GB model on 16 GB = ~50% — set pause above 55%)."
+             aria-label="RAM pause threshold percentage"
              oninput="updateLabel('lbl-ram-pause', this.value, '%')"
              onchange="saveThresholds()">
     </div>
     <div class="slider-item">
       <label>RAM resume <span id="lbl-ram-resume">60%</span></label>
       <input type="range" id="sl-ram-resume" min="30" max="90" value="60"
+             title="Watchdog resumes the model only after RAM drops below this percentage. Keep a gap between pause and resume thresholds to prevent the model from rapidly pausing and resuming."
+             aria-label="RAM resume threshold percentage"
              oninput="updateLabel('lbl-ram-resume', this.value, '%')"
              onchange="saveThresholds()">
     </div>
     <div class="slider-item">
       <label>CPU pause <span id="lbl-cpu-pause">90%</span></label>
       <input type="range" id="sl-cpu-pause" min="50" max="99" value="90"
+             title="Watchdog pauses the model when CPU usage stays above this percentage for a sustained period. Helps free CPU during intensive tasks like gaming or video encoding."
+             aria-label="CPU pause threshold percentage"
              oninput="updateLabel('lbl-cpu-pause', this.value, '%')"
              onchange="saveThresholds()">
     </div>
     <div class="slider-item">
       <label>GPU VRAM pause <span id="lbl-gpu-pause">85%</span></label>
       <input type="range" id="sl-gpu-pause" min="50" max="98" value="85"
+             title="Watchdog pauses the model when GPU VRAM exceeds this percentage. Useful when running GPU-intensive apps like games alongside the LLM. Not applicable on Apple Silicon (unified memory)."
+             aria-label="GPU VRAM pause threshold percentage"
              oninput="updateLabel('lbl-gpu-pause', this.value, '%')"
              onchange="saveThresholds()">
     </div>
     <div class="slider-item">
       <label>Refresh rate <span id="lbl-refresh">5s</span></label>
       <input type="range" id="sl-refresh" min="5" max="60" value="5"
+             title="How often the dashboard polls for updated status. Lower = more responsive display, slightly more network traffic. Higher = less frequent updates. Stored in your browser, not on the server."
+             aria-label="Dashboard refresh rate in seconds"
              oninput="updateLabel('lbl-refresh', this.value, 's')"
              onchange="applyRefreshRate()">
     </div>
   </div>
   <div style="margin-top:14px;font-size:12px;display:flex;align-items:center;gap:8px">
     <input type="checkbox" id="cb-auto-resume" checked onchange="saveThresholds()"
+           title="When checked: watchdog automatically reloads the model after RAM pressure clears. Uncheck if your model fills most of your RAM — otherwise the model reloading is what causes the pressure, creating an infinite pause/resume loop."
+           aria-label="Auto-resume model after RAM pressure clears"
            style="accent-color:var(--accent);cursor:pointer;width:14px;height:14px">
     <label for="cb-auto-resume" style="color:var(--dim);cursor:pointer">
       Auto-resume after RAM pressure clears
@@ -763,6 +779,15 @@ function renderState(p, w) {
 
   badge.textContent = label;
   badge.className = "badge " + cls;
+  const stateTips = {
+    RUNNING:   "Ollama is running and a model is loaded in memory — ready to serve requests.",
+    PAUSED:    "Model has been unloaded from memory. Ollama is still running. Click RESUME to reload the model.",
+    IDLE:      "Ollama is running but no model is loaded. Select a model and click LOAD, or click RESUME if one was previously loaded.",
+    STOPPED:   "Ollama service is not running. Click START SVC to start it. No requests can be served.",
+    STOPPING:  "Ollama is shutting down — unloading model and stopping the service.",
+    STARTING:  "Ollama is starting up — waiting for the service to become ready.",
+  };
+  badge.title = stateTips[label] || label;
   modelEl.textContent = p.model_name ? p.model_name : "";
 
   if (w && w.last_reason) {
@@ -872,11 +897,18 @@ function renderProvider(p) {
   const epEl   = document.getElementById("pv-endpoint");
   const dotEl  = document.getElementById("pv-status-dot");
   const txtEl  = document.getElementById("pv-status-text");
-  if (p.endpoint) { epEl.textContent = p.endpoint; }
+  if (p.endpoint) {
+    epEl.textContent = p.endpoint;
+    epEl.title = "The URL llm-valet uses to communicate with Ollama. Configured via ollama_url in config.yaml.";
+  }
   const up = p.running;
   dotEl.className = "pv-status-dot " + (up ? "up" : "down");
+  dotEl.title = up ? "Ollama is reachable and responding at this endpoint." : "Ollama is not responding at this endpoint. The service may be stopped or starting up.";
   txtEl.textContent = up ? "Listening" : "Offline";
   txtEl.className   = up ? "up" : "down";
+
+  const providerBadge = document.getElementById("provider-badge");
+  if (providerBadge) providerBadge.title = "Active LLM provider. Currently Ollama. Additional providers (LM Studio, vLLM) are planned for future releases.";
 
   modelEl.textContent = p.model_loaded ? (p.model_name || "unknown") : "none";
   memEl.textContent   = p.memory_used_mb ? p.memory_used_mb + " MB" : "—";
