@@ -77,8 +77,20 @@
   .subtitle {
     font-size: 11px;
     color: var(--dim);
-    margin-bottom: 28px;
+    margin-bottom: 10px;
   }
+  .security-badge {
+    display: none;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    padding: 2px 8px;
+    border-radius: 2px;
+    margin-bottom: 18px;
+  }
+  .security-badge.safe { color: var(--dim);   border: 1px solid var(--border); }
+  .security-badge.ok   { color: var(--yellow); border: 1px solid var(--yellow); }
+  .security-badge.warn { color: var(--red);    border: 1px solid var(--red);    }
 
   /* ── Section ─────────────────────────────────────────────────────────────── */
   section { margin-bottom: 0; }
@@ -342,6 +354,7 @@
   LLM lifecycle manager ·
   <a href="https://legionforge.org" target="_blank" rel="noopener">by LegionForge</a>
 </p>
+<div id="security-badge" class="security-badge"></div>
 
 <div id="error-banner"></div>
 
@@ -643,6 +656,13 @@ async function poll() {
     if (!r.ok) throw new Error("HTTP " + r.status);
     const data = await r.json();
     hideError();
+
+    // Capture before renderState() clears _pendingAction — used for model reload below
+    const serviceJustStarted = (
+      (_pendingAction === "starting" || _pendingAction === "restarting") &&
+      data.provider.running
+    );
+
     _lastProvider = data.provider;
     _lastWatchdog = data.watchdog;
     renderState(data.provider, data.watchdog);
@@ -652,9 +672,32 @@ async function poll() {
     if (data.version) {
       document.getElementById("version-badge").textContent = "v" + data.version;
     }
+    if (data.security) renderSecurityBadge(data.security);
+
+    // Reload model dropdown after START/RESTART — Ollama needs ~1.5s to index models
+    // after the service comes up, so /models returns empty immediately after start.
+    if (serviceJustStarted) {
+      setTimeout(loadModels, 1500);
+    }
   } catch (e) {
     if (!e.message.includes("401")) showError("Cannot reach llm-valet API — " + e.message);
   }
+}
+
+function renderSecurityBadge(sec) {
+  const el = document.getElementById("security-badge");
+  if (!el) return;
+  if (sec.lan_exposed && !sec.auth_enabled) {
+    el.textContent = "⚠ LAN EXPOSED — NO AUTH";
+    el.className = "security-badge warn";
+  } else if (sec.lan_exposed) {
+    el.textContent = "LAN EXPOSED — AUTH ACTIVE";
+    el.className = "security-badge ok";
+  } else {
+    el.textContent = "LOCALHOST ONLY";
+    el.className = "security-badge safe";
+  }
+  el.style.display = "";   // textContent only — no innerHTML
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
