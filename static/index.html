@@ -693,14 +693,14 @@ function renderSecurityBadge(sec) {
   let text, cls, tooltip, searchUrl;
 
   if (sec.lan_exposed && !sec.auth_enabled) {
-    text      = "⚠ Visible on your network — no protection";
+    text      = "⚠ Visible on your local network — not secured";
     cls       = "security-badge warn";
-    tooltip   = "llm-valet is reachable by anyone on your local network and has no API key set. Anyone nearby could pause, stop, or control your LLM service. Set an api_key in config.yaml to protect it.";
+    tooltip   = "Anyone on your local network can control your LLM service right now — no password or key is required. To fix this: open ~/.llm-valet/config.yaml, add a line that reads  api_key: your-secret-key  then restart llm-valet. Choose any strong passphrase you like.";
     searchUrl = "https://duckduckgo.com/?q=local+network+service+no+authentication+security+risk";
   } else if (sec.lan_exposed) {
-    text      = "Visible on your network — API key required";
+    text      = "Visible on your local network — API key securing access";
     cls       = "security-badge ok";
-    tooltip   = "llm-valet is reachable by other devices on your local network. An API key is required for access, so it is protected from unauthorized use. This is normal if you set host: 0.0.0.0 intentionally.";
+    tooltip   = "llm-valet is reachable by other devices on your local network, and an API key is required for access. Your service is protected. This is expected if you set host: 0.0.0.0 in config.yaml.";
     searchUrl = "https://duckduckgo.com/?q=local+network+LAN+exposure+security+best+practices";
   } else {
     text      = "Local access only";
