@@ -553,6 +553,7 @@ let _lastProvider = null;   // last known provider state from poll
 let _lastWatchdog = null;   // last known watchdog state from poll
 let _pendingAction = null;  // "stopping"|"starting"|"restarting" while async op in flight
 const _draggingSliders = new Set();  // slider IDs currently held by the user — skip sync while dragging
+let _savingConfig = false;           // PUT to /config in flight — block poll sync until write completes
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
 
@@ -1130,6 +1131,9 @@ function initSliderDragTracking() {
 }
 
 function syncConfigSliders(cfg) {
+  // Skip sync while a PUT is in flight — prevents poll from overwriting a slider
+  // in the gap between the user releasing and the server acknowledging the write.
+  if (_savingConfig) return;
   // Called on every poll tick. setSlider is a no-op for sliders currently dragged.
   setSlider("sl-ram-pause",  "lbl-ram-pause",  cfg.ram_pause_pct      ?? _thresholds.ram_pause_pct);
   setSlider("sl-ram-resume", "lbl-ram-resume", cfg.ram_resume_pct     ?? 60);
@@ -1182,6 +1186,9 @@ async function saveThresholds() {
   _thresholds.cpu_pause_pct      = body.cpu_pause_pct;
   _thresholds.gpu_vram_pause_pct = body.gpu_vram_pause_pct;
 
+  // Hold the write-lock for the duration of the PUT so a poll tick mid-flight
+  // cannot overwrite the slider with the server's stale value.
+  _savingConfig = true;
   try {
     await apiFetch("/config", {
       method: "PUT",
@@ -1189,6 +1196,7 @@ async function saveThresholds() {
       body: JSON.stringify(body),
     });
   } catch (_) { /* non-fatal */ }
+  finally { _savingConfig = false; }
 }
 
 function updateLabel(id, value, suffix) {
