@@ -162,12 +162,16 @@ def api(request: pytest.FixtureRequest):
         patch("llm_valet.api._build_collector", return_value=mock_collector),
         patch("llm_valet.api._check_not_root"),
         patch("llm_valet.api._configure_logging"),
+        # Keep process_iter mocked for the entire TestClient lifetime, not just
+        # create_app(). The watchdog background task calls _detect_game() on its
+        # first tick (before the first asyncio.sleep). Without this patch the real
+        # psutil runs and any steamapps/common process on the host machine causes
+        # an unexpected auto-pause, breaking state assertions in several tests.
         patch("llm_valet.watchdog.psutil.process_iter", return_value=[]),
     ):
         app = create_app(settings)
-
-    with TestClient(app, raise_server_exceptions=True) as tc:
-        yield _AuthClient(tc), mock_provider, mock_collector
+        with TestClient(app, raise_server_exceptions=True) as tc:
+            yield _AuthClient(tc), mock_provider, mock_collector
 
 
 # ── GET /status ───────────────────────────────────────────────────────────────
