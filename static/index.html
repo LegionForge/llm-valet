@@ -974,7 +974,7 @@ function renderProvider(p) {
     if (p.overcommit && p.memory_used_mb) {
       const mb  = p.memory_used_mb;
       const str = mb >= 1024 ? (mb / 1024).toFixed(1) + " GB" : mb + " MB";
-      ocEl.textContent = "⚠ Model (" + str + ") exceeds RAM pause threshold — watchdog auto-pause won't trigger. Use PAUSE manually when needed.";
+      ocEl.textContent = "⚠ Model (" + str + ") exceeds RAM pause threshold — watchdog auto-pause won't trigger. Performance may be degraded. Use PAUSE manually when needed.";
       ocEl.style.display = "block";
     } else {
       ocEl.style.display = "none";
