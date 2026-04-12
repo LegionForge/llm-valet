@@ -2,7 +2,8 @@ import asyncio
 import logging
 import re
 import sys
-from typing import Any
+import types
+from typing import Any, cast
 
 import httpx
 import psutil
@@ -391,7 +392,7 @@ def _svcmgr_start() -> bool:
         logger.info("no svcmgr available for this platform — assuming Ollama will start externally")
         return True
     try:
-        return _mod.start_service()
+        return cast(bool, _mod.start_service())
     except Exception as exc:
         logger.warning("svcmgr.start_service raised", extra={"error": str(exc)})
         return True  # let health-check loop determine actual state
@@ -404,13 +405,13 @@ def _svcmgr_stop() -> bool:
         logger.info("no svcmgr available for this platform — relying on psutil fallback")
         return False
     try:
-        return _mod.stop_service()
+        return cast(bool, _mod.stop_service())
     except Exception as exc:
         logger.warning("svcmgr.stop_service raised", extra={"error": str(exc)})
         return False  # psutil fallback will take over
 
 
-def _svcmgr_module():  # type: ignore[return]
+def _svcmgr_module() -> types.ModuleType | None:
     """
     Return the platform-appropriate svcmgr module, or None if unavailable.
 
