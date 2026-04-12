@@ -23,7 +23,7 @@ from llm_valet.watchdog import Watchdog
 
 logger = logging.getLogger(__name__)
 
-_VERSION = "0.4.1"
+_VERSION = "0.5.0"
 
 
 class _RateLimiter:
