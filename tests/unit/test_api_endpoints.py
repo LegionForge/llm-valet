@@ -386,7 +386,7 @@ class TestPostLoad:
     def test_calls_provider_load_model(self, api: tuple) -> None:
         client, mock_provider, _ = api
         client.post("/load", json={"model": "test:model"})
-        mock_provider.load_model.assert_called_once_with("test:model")
+        mock_provider.load_model.assert_called_once_with("test:model", num_ctx=None)
 
     def test_calls_provider_load_model_with_num_ctx(self, api: tuple) -> None:
         client, mock_provider, _ = api

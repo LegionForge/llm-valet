@@ -131,7 +131,7 @@ def _spawn_serve() -> bool:
         logger.error("ollama binary not found in PATH or known locations — cannot start")
         return False
     try:
-        subprocess.Popen(  # noqa: S603  # shell=False, no user input in args
+        subprocess.Popen(
             [str(binary), "serve"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,

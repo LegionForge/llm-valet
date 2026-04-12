@@ -133,7 +133,7 @@ def _launch_exe() -> bool:
         # Keeps the child alive independently of our console, no visible window.
         DETACHED_PROCESS   = 0x00000008
         CREATE_NO_WINDOW   = 0x08000000
-        subprocess.Popen(  # noqa: S603  # shell=False, no user input in args
+        subprocess.Popen(
             [str(binary)],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
