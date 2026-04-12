@@ -951,11 +951,19 @@ function renderProvider(p) {
     ratioEl.textContent = "";
   }
 
-  // Highlight the currently loaded model in the dropdown
+  // Highlight the currently loaded model in the dropdown; init ctx row on change.
+  // onModelSelectChange() is only called when the selection changes — not every tick —
+  // so the user's ctx dropdown choice is not reset during an active selection.
   const sel = document.getElementById("model-select");
   if (p.model_loaded && p.model_name) {
     for (const opt of sel.options) {
-      if (opt.value === p.model_name) { sel.value = p.model_name; break; }
+      if (opt.value === p.model_name) {
+        if (sel.value !== p.model_name) {
+          sel.value = p.model_name;
+          onModelSelectChange();
+        }
+        break;
+      }
     }
   }
 }
