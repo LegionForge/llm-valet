@@ -253,13 +253,15 @@ class OllamaProvider(LLMProvider):
             pass
         return None
 
-    async def load_model(self, model_name: str) -> bool:
+    async def load_model(self, model_name: str, num_ctx: int | None = None) -> bool:
         """
         Switch to a different model:
           1. Validate name against allowlist regex.
           2. Unload the currently loaded model (if any) via keep_alive=0.
-          3. Pre-warm the new model via keep_alive=-1.
+          3. Pre-warm the new model via keep_alive=-1, optionally with num_ctx.
           4. Update _model_name so future pause/resume use the new model.
+        num_ctx overrides Ollama's default context window for this load.
+        Must be >= 512 if provided; silently ignored if out of range.
         """
         if not _MODEL_NAME_RE.match(model_name):
             logger.error("load_model rejected — invalid model name", extra={"model": model_name})
@@ -280,16 +282,19 @@ class OllamaProvider(LLMProvider):
 
         # Pre-warm the new model.  stream=False ensures keep_alive is committed before
         # the connection closes.  60s timeout for slow storage.
+        payload: dict[str, object] = {"model": model_name, "keep_alive": -1, "stream": False}
+        if num_ctx is not None and num_ctx >= 512:
+            payload["options"] = {"num_ctx": num_ctx}
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
                 resp = await client.post(
                     f"{self._base_url}/api/generate",
-                    json={"model": model_name, "keep_alive": -1, "stream": False},
+                    json=payload,
                 )
                 resp.raise_for_status()
             self._model_name = model_name
             self._last_loaded_model = model_name
-            logger.info("model loaded", extra={"model": model_name})
+            logger.info("model loaded", extra={"model": model_name, "num_ctx": num_ctx})
             return True
         except httpx.HTTPError as exc:
             logger.error("load_model: pre-warm failed", extra={"error": str(exc)})
