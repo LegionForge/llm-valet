@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "llm-valet"
-version = "0.2.0"
+version = "0.4.0"
 description = "Cross-platform LLM lifecycle manager with resource-pressure and gaming-detection autopause"
 readme = "README.md"
 requires-python = ">=3.11"
