@@ -334,6 +334,17 @@
   #pull-input:focus { outline: none; border-color: var(--accent); }
   #pull-status { font-size: 11px; color: var(--dim); margin-top: 6px; min-height: 15px; }
 
+  /* ── Context window selector ─────────────────────────────────────────────── */
+  .ctx-select-row {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--dim);
+  }
+  .ctx-select-row label { white-space: nowrap; flex-shrink: 0; }
+
   /* ── Separator ───────────────────────────────────────────────────────────── */
   .load-status { font-size: 11px; color: var(--dim); margin-top: 6px; min-height: 15px; }
 </style>
@@ -401,12 +412,21 @@
   <div class="model-select-row">
     <select id="model-select"
             title="Choose a model to load into memory. Only models already downloaded to this machine are listed. Use Model Management below to pull new ones."
-            aria-label="Select model to load">
+            aria-label="Select model to load"
+            onchange="onModelSelectChange()">
       <option value="">— select model —</option>
     </select>
     <button id="btn-load" onclick="loadModel()"
             title="Load the selected model into memory so it can serve requests. RAM usage will increase. The model stays loaded until you PAUSE or STOP."
             aria-label="Load selected model">LOAD</button>
+  </div>
+  <div class="ctx-select-row" id="ctx-select-row">
+    <label for="ctx-select">Context window</label>
+    <select id="ctx-select"
+            title="Override how many tokens fit in the model's context window. 'Model default' uses Ollama's built-in value (usually the model's trained maximum). Smaller values use less RAM; larger values allow longer conversations but increase memory usage."
+            aria-label="Context window size override">
+      <option value="">Model default</option>
+    </select>
   </div>
   <div class="load-status" id="load-status"></div>
 </section>
@@ -946,6 +966,57 @@ function _fmtCtx(n) {
   return n + " ctx";
 }
 
+// ── Context window selector ───────────────────────────────────────────────────
+
+// Common context sizes to offer as options. Filtered to ≤ model's max at render time.
+const _CTX_OPTIONS = [512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072];
+
+function _fmtCtxLabel(n) {
+  if (n >= 131072) return "128K tokens";
+  if (n >= 65536)  return "64K tokens";
+  if (n >= 32768)  return "32K tokens";
+  if (n >= 16384)  return "16K tokens";
+  if (n >= 8192)   return "8K tokens";
+  if (n >= 4096)   return "4K tokens";
+  if (n >= 2048)   return "2K tokens";
+  if (n >= 1024)   return "1K tokens";
+  return n + " tokens";
+}
+
+function onModelSelectChange() {
+  const sel = document.getElementById("model-select");
+  const ctxRow = document.getElementById("ctx-select-row");
+  const ctxSel = document.getElementById("ctx-select");
+  const name = sel.value;
+  const meta = name ? _modelMeta[name] : null;
+  const maxCtx = meta && meta.context_length ? meta.context_length : null;
+
+  // Rebuild ctx options
+  while (ctxSel.options.length > 1) ctxSel.remove(1);
+
+  if (maxCtx) {
+    for (const size of _CTX_OPTIONS) {
+      if (size > maxCtx) break;
+      const opt = document.createElement("option");
+      opt.value = size;
+      const suffix = size === maxCtx ? " (model max)" : "";
+      opt.textContent = _fmtCtxLabel(size) + suffix;
+      ctxSel.appendChild(opt);
+    }
+    // If model max isn't a standard option, add it explicitly
+    if (!_CTX_OPTIONS.includes(maxCtx)) {
+      const opt = document.createElement("option");
+      opt.value = maxCtx;
+      opt.textContent = _fmtCtxLabel(maxCtx) + " (model max)";
+      ctxSel.appendChild(opt);
+    }
+    ctxRow.style.display = "flex";
+  } else {
+    // Max unknown — no useful options to show; hide the row
+    ctxRow.style.display = "none";
+  }
+}
+
 async function loadModels() {
   try {
     const r = await apiFetch("/models");
@@ -977,15 +1048,24 @@ async function loadModel() {
   const btn = document.getElementById("btn-load");
   const statusEl = document.getElementById("load-status");
   btn.disabled = true;
-  statusEl.textContent = "Loading " + name + "...";
+
+  const ctxSelEl = document.getElementById("ctx-select");
+  const rawCtx = ctxSelEl ? ctxSelEl.value : "";
+  const numCtx = rawCtx ? parseInt(rawCtx, 10) : null;
+  const ctxNote = numCtx ? " (" + _fmtCtxLabel(numCtx) + " ctx)" : "";
+  statusEl.textContent = "Loading " + name + ctxNote + "...";
+
+  const payload = { model: name };
+  if (numCtx) payload.num_ctx = numCtx;
+
   try {
     const r = await apiFetch("/load", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: name }),
+      body: JSON.stringify(payload),
     });
     const data = await r.json();
-    statusEl.textContent = data.ok ? name + " loaded" : "load failed";
+    statusEl.textContent = data.ok ? name + " loaded" + ctxNote : "load failed";
     await poll();
   } catch (e) {
     statusEl.textContent = "error: " + e.message;
