@@ -1072,7 +1072,21 @@ async function loadModels() {
       sel.appendChild(opt);
     }
     if (prev) sel.value = prev;
+    // If no prior selection, pre-select the currently loaded model from the
+    // last poll result.  This covers two cases:
+    //   (a) loadModels() runs after poll() — e.g. post-START setTimeout refresh
+    //   (b) hard refresh where _lastProvider is populated before loadModels()
+    // On very first page load _lastProvider is null here, so renderProvider()
+    // handles the initial sync on the first poll tick.
+    if (!sel.value && _lastProvider && _lastProvider.model_loaded && _lastProvider.model_name) {
+      for (const opt of sel.options) {
+        if (opt.value === _lastProvider.model_name) { sel.value = opt.value; break; }
+      }
+    }
     onModelSelectChange();  // re-init ctx row whenever model list refreshes
+    // loadModels() is a system refresh, not a user selection — clear the dirty
+    // flag so renderProvider() can still sync the dropdown on the next poll.
+    _modelSelectDirty = false;
     renderMgmtList(data.models || []);
   } catch (_) { /* non-fatal */ }
 }
