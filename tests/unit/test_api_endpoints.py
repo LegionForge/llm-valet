@@ -201,7 +201,7 @@ class TestGetStatus:
         client, _, _ = api
         data = client.get("/status").json()
         assert "version" in data
-        assert data["version"] == "0.2.0"
+        assert data["version"] == "0.4.0"
 
     def test_provider_running_and_loaded(self, api: tuple) -> None:
         client, mock_provider, _ = api
