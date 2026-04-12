@@ -953,11 +953,14 @@ function renderProvider(p) {
     ctxEl.textContent = "—";
   }
 
-  // CPU/GPU layer memory ratio
+  // CPU/GPU layer memory ratio + % split
   if (p.model_loaded && p.memory_used_mb && p.size_vram_mb != null) {
-    const gpuMB = p.size_vram_mb;
-    const cpuMB = p.memory_used_mb - gpuMB;
-    ratioEl.textContent = "Layers — CPU: " + cpuMB + " MB · GPU: " + gpuMB + " MB";
+    const gpuMB  = p.size_vram_mb;
+    const cpuMB  = p.memory_used_mb - gpuMB;
+    const gpuPct = Math.round((gpuMB / p.memory_used_mb) * 100);
+    const cpuPct = 100 - gpuPct;
+    ratioEl.textContent =
+      "Layers — CPU: " + cpuMB + " MB (" + cpuPct + "%) · GPU: " + gpuMB + " MB (" + gpuPct + "%)";
   } else if (p.model_loaded && p.memory_used_mb) {
     ratioEl.textContent = "Layers — CPU: " + p.memory_used_mb + " MB · GPU: — MB";
   } else {
