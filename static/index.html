@@ -973,7 +973,7 @@ function renderProvider(p) {
 
 function _fmtCtx(n) {
   if (n >= 1000000) return (n / 1000000).toFixed(1) + "M ctx";
-  if (n >= 1000)    return Math.round(n / 1000) + "K ctx";
+  if (n >= 1024)    return Math.round(n / 1024) + "K ctx";  // 1024 not 1000 — ctx lengths are powers of 2
   return n + " ctx";
 }
 
