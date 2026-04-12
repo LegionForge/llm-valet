@@ -1037,6 +1037,7 @@ async function loadModels() {
       sel.appendChild(opt);
     }
     if (prev) sel.value = prev;
+    onModelSelectChange();  // re-init ctx row whenever model list refreshes
     renderMgmtList(data.models || []);
   } catch (_) { /* non-fatal */ }
 }
