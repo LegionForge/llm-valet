@@ -252,6 +252,37 @@ class TestGetStatus:
         assert "total_mb" in mem
         assert "pressure" in mem
 
+    def test_overcommit_false_when_model_fits_in_threshold(self, api: tuple) -> None:
+        """Default fixture: 2000 MB model on 16384 MB machine, ram_pause_pct=85 → no overcommit."""
+        client, _, _ = api
+        data = client.get("/status").json()
+        # 16384 * 0.85 = 13926 MB threshold; 2000 MB model is well within it
+        assert data["provider"]["overcommit"] is False
+
+    def test_overcommit_true_when_model_exceeds_threshold(self, api: tuple) -> None:
+        """Model larger than ram_pause_pct of total RAM → overcommit flagged."""
+        client, mock_provider, _ = api
+        # 16384 MB total, ram_pause_pct=85 → threshold = 13926 MB
+        # Simulate a 26 GB model (like mistral-nemo:12b at 128K ctx on Mac Mini)
+        mock_provider.status.return_value = _make_provider_status(memory_used_mb=26624)
+        data = client.get("/status").json()
+        assert data["provider"]["overcommit"] is True
+
+    def test_overcommit_false_when_no_model_loaded(self, api: tuple) -> None:
+        client, mock_provider, _ = api
+        mock_provider.status.return_value = _make_provider_status(
+            model_loaded=False, model_name=None, memory_used_mb=None
+        )
+        data = client.get("/status").json()
+        assert data["provider"]["overcommit"] is False
+
+    def test_overcommit_false_when_memory_used_mb_is_none(self, api: tuple) -> None:
+        """Provider loaded but memory_used_mb not yet reported → no false positive."""
+        client, mock_provider, _ = api
+        mock_provider.status.return_value = _make_provider_status(memory_used_mb=None)
+        data = client.get("/status").json()
+        assert data["provider"]["overcommit"] is False
+
 
 # ── POST /pause ───────────────────────────────────────────────────────────────
 
