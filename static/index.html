@@ -424,7 +424,8 @@
     <label for="ctx-select">Context window</label>
     <select id="ctx-select"
             title="Override how many tokens fit in the model's context window. 'Model default' uses Ollama's built-in value (usually the model's trained maximum). Smaller values use less RAM; larger values allow longer conversations but increase memory usage."
-            aria-label="Context window size override">
+            aria-label="Context window size override"
+            onchange="updateLoadButton()">
       <option value="">Model default</option>
     </select>
   </div>
@@ -966,6 +967,7 @@ function renderProvider(p) {
       }
     }
   }
+  updateLoadButton();
 }
 
 function _fmtCtx(n) {
@@ -989,6 +991,28 @@ function _fmtCtxLabel(n) {
   if (n >= 2048)   return "2K tokens";
   if (n >= 1024)   return "1K tokens";
   return n + " tokens";
+}
+
+function updateLoadButton() {
+  const btn      = document.getElementById("btn-load");
+  const modelSel = document.getElementById("model-select");
+  const ctxSel   = document.getElementById("ctx-select");
+  if (!btn) return;
+
+  const selectedModel = modelSel ? modelSel.value : "";
+  const selectedCtx   = ctxSel && ctxSel.value ? parseInt(ctxSel.value, 10) : null;
+  const loadedModel   = _lastProvider && _lastProvider.model_loaded ? _lastProvider.model_name : null;
+  const loadedCtx     = _lastProvider ? _lastProvider.loaded_context_length : null;
+
+  if (loadedModel && selectedModel === loadedModel) {
+    if (selectedCtx && selectedCtx !== loadedCtx) {
+      btn.textContent = "RELOAD \u00b7 " + _fmtCtxLabel(selectedCtx);  // RELOAD · 4K tokens
+    } else {
+      btn.textContent = "RELOAD";
+    }
+  } else {
+    btn.textContent = "LOAD";
+  }
 }
 
 function onModelSelectChange() {
@@ -1023,6 +1047,7 @@ function onModelSelectChange() {
     // Max unknown — no useful options to show; hide the row
     ctxRow.style.display = "none";
   }
+  updateLoadButton();
 }
 
 async function loadModels() {
@@ -1080,6 +1105,7 @@ async function loadModel() {
     statusEl.textContent = "error: " + e.message;
   } finally {
     btn.disabled = false;
+    updateLoadButton();
   }
 }
 
