@@ -43,11 +43,20 @@ class OllamaProvider(LLMProvider):
         # Cached at pause time — /api/ps is empty after eviction, so resume
         # needs to remember which model to reload.
         self._last_loaded_model: str | None = None
+        # Context window cached at pause time — Ollama resets to its default on
+        # resume if options are not re-applied.  /api/ps is empty after eviction
+        # so this must be captured before the keep_alive=0 call.
+        self._last_loaded_ctx: int | None = None
 
     # ── LLMProvider interface ─────────────────────────────────────────────────
 
     async def pause(self) -> bool:
         """Evict the loaded model from memory via keep_alive=0. Service stays running."""
+        # Capture context_length before eviction — /api/ps is empty after eviction,
+        # so resume() would have no way to recover the active context window.
+        current_status = await self.status()
+        self._last_loaded_ctx = current_status.loaded_context_length
+
         model = await self._resolve_model()
         if model is None:
             logger.info("pause skipped — no model currently loaded")
@@ -86,13 +95,21 @@ class OllamaProvider(LLMProvider):
             # stream=False ensures Ollama sends a single complete response rather
             # than a chunked stream — required for keep_alive to be committed before
             # the connection closes.  Longer timeout for slow storage.
+            payload: dict[str, object] = {"model": model, "keep_alive": -1, "stream": False}
+            if self._last_loaded_ctx is not None:
+                # Restore the context window that was active before eviction.
+                # Without this, Ollama resets to its default on the next load.
+                payload["options"] = {"num_ctx": self._last_loaded_ctx}
             async with httpx.AsyncClient(timeout=60.0) as client:
                 resp = await client.post(
                     f"{self._base_url}/api/generate",
-                    json={"model": model, "keep_alive": -1, "stream": False},
+                    json=payload,
                 )
                 resp.raise_for_status()
-                logger.info("model pre-warmed", extra={"model": model})
+                logger.info(
+                    "model pre-warmed",
+                    extra={"model": model, "num_ctx": self._last_loaded_ctx},
+                )
                 return True
         except httpx.HTTPError as exc:
             logger.error("resume request failed", extra={"error": str(exc)})
