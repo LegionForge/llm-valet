@@ -216,10 +216,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """Provider state + current resource snapshot + watchdog state."""
         provider_status: ProviderStatus = await p.status()
         metrics: SystemMetrics = c.collect()
+        # Over-commit: model's actual memory footprint (from Ollama /api/ps) exceeds
+        # the RAM threshold psutil would need to trigger auto-pause.  psutil underreports
+        # real memory commitment when the model spills into NVMe swap (Apple Silicon and
+        # others), so the watchdog's RAM% check may never fire — the user needs a warning.
+        ram_threshold_mb = metrics.memory.total_mb * (settings.thresholds.ram_pause_pct / 100)
+        overcommit = bool(
+            provider_status.model_loaded
+            and provider_status.memory_used_mb is not None
+            and provider_status.memory_used_mb > ram_threshold_mb
+        )
         return {
             "provider": {
                 **provider_status.__dict__,
                 "endpoint": settings.ollama_url,
+                "overcommit": overcommit,
             },
             "metrics": _metrics_to_dict(metrics),
             "watchdog": {"state": w.state.value, "last_reason": w.last_reason},

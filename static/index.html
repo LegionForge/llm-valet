@@ -94,6 +94,16 @@
   .security-badge a { color: inherit; text-decoration: none; opacity: 0.8; margin-left: 4px; }
   .security-badge a:hover { text-decoration: underline; opacity: 1; }
 
+  .overcommit-warn {
+    display: none;
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 3px;
+    margin-bottom: 8px;
+    color: var(--yellow);
+    border: 1px solid var(--yellow);
+  }
+
   /* ── Section ─────────────────────────────────────────────────────────────── */
   section { margin-bottom: 0; }
   .section-title {
@@ -409,6 +419,7 @@
     <div class="provider-stat">Context: <span id="pv-ctx">—</span></div>
   </div>
   <div class="layer-ratio" id="layer-ratio"></div>
+  <div class="overcommit-warn" id="overcommit-warn" role="alert" aria-live="polite"></div>
   <div class="model-select-row">
     <select id="model-select"
             title="Choose a model to load into memory. Only models already downloaded to this machine are listed. Use Model Management below to pull new ones."
@@ -942,15 +953,32 @@ function renderProvider(p) {
     ctxEl.textContent = "—";
   }
 
-  // CPU/GPU layer memory ratio
+  // CPU/GPU layer memory ratio + % split
   if (p.model_loaded && p.memory_used_mb && p.size_vram_mb != null) {
-    const gpuMB = p.size_vram_mb;
-    const cpuMB = p.memory_used_mb - gpuMB;
-    ratioEl.textContent = "Layers — CPU: " + cpuMB + " MB · GPU: " + gpuMB + " MB";
+    const gpuMB  = p.size_vram_mb;
+    const cpuMB  = p.memory_used_mb - gpuMB;
+    const gpuPct = Math.round((gpuMB / p.memory_used_mb) * 100);
+    const cpuPct = 100 - gpuPct;
+    ratioEl.textContent =
+      "Layers — CPU: " + cpuMB + " MB (" + cpuPct + "%) · GPU: " + gpuMB + " MB (" + gpuPct + "%)";
   } else if (p.model_loaded && p.memory_used_mb) {
     ratioEl.textContent = "Layers — CPU: " + p.memory_used_mb + " MB · GPU: — MB";
   } else {
     ratioEl.textContent = "";
+  }
+
+  // Over-commit warning — model's actual memory (from Ollama /api/ps) exceeds the RAM
+  // pause threshold, meaning psutil-based auto-pause won't trigger.  Show amber warning.
+  const ocEl = document.getElementById("overcommit-warn");
+  if (ocEl) {
+    if (p.overcommit && p.memory_used_mb) {
+      const mb  = p.memory_used_mb;
+      const str = mb >= 1024 ? (mb / 1024).toFixed(1) + " GB" : mb + " MB";
+      ocEl.textContent = "⚠ Model (" + str + ") exceeds RAM pause threshold — watchdog auto-pause won't trigger. Use PAUSE manually when needed.";
+      ocEl.style.display = "block";
+    } else {
+      ocEl.style.display = "none";
+    }
   }
 
   // Sync model dropdown to currently loaded model — but only when the user hasn't made
@@ -1072,7 +1100,21 @@ async function loadModels() {
       sel.appendChild(opt);
     }
     if (prev) sel.value = prev;
+    // If no prior selection, pre-select the currently loaded model from the
+    // last poll result.  This covers two cases:
+    //   (a) loadModels() runs after poll() — e.g. post-START setTimeout refresh
+    //   (b) hard refresh where _lastProvider is populated before loadModels()
+    // On very first page load _lastProvider is null here, so renderProvider()
+    // handles the initial sync on the first poll tick.
+    if (!sel.value && _lastProvider && _lastProvider.model_loaded && _lastProvider.model_name) {
+      for (const opt of sel.options) {
+        if (opt.value === _lastProvider.model_name) { sel.value = opt.value; break; }
+      }
+    }
     onModelSelectChange();  // re-init ctx row whenever model list refreshes
+    // loadModels() is a system refresh, not a user selection — clear the dirty
+    // flag so renderProvider() can still sync the dropdown on the next poll.
+    _modelSelectDirty = false;
     renderMgmtList(data.models || []);
   } catch (_) { /* non-fatal */ }
 }
