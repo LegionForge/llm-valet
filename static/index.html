@@ -591,6 +591,7 @@ let _lastWatchdog = null;   // last known watchdog state from poll
 let _pendingAction = null;  // "stopping"|"starting"|"restarting" while async op in flight
 const _draggingSliders = new Set();  // slider IDs currently held by the user — skip sync while dragging
 let _savingConfig = false;           // PUT to /config in flight — block poll sync until write completes
+let _modelSelectDirty = false;       // user has chosen a model that hasn't been loaded yet — don't overwrite with server state
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
 
@@ -952,11 +953,11 @@ function renderProvider(p) {
     ratioEl.textContent = "";
   }
 
-  // Highlight the currently loaded model in the dropdown; init ctx row on change.
-  // onModelSelectChange() is only called when the selection changes — not every tick —
-  // so the user's ctx dropdown choice is not reset during an active selection.
+  // Sync model dropdown to currently loaded model — but only when the user hasn't made
+  // a pending selection. _modelSelectDirty blocks the overwrite while a choice is in
+  // flight so the user doesn't race against the poll interval.
   const sel = document.getElementById("model-select");
-  if (p.model_loaded && p.model_name) {
+  if (!_modelSelectDirty && p.model_loaded && p.model_name) {
     for (const opt of sel.options) {
       if (opt.value === p.model_name) {
         if (sel.value !== p.model_name) {
@@ -1016,6 +1017,7 @@ function updateLoadButton() {
 }
 
 function onModelSelectChange() {
+  _modelSelectDirty = true;  // user has made a manual selection — block poll sync until LOAD is acted on
   const sel = document.getElementById("model-select");
   const ctxRow = document.getElementById("ctx-select-row");
   const ctxSel = document.getElementById("ctx-select");
@@ -1105,6 +1107,7 @@ async function loadModel() {
     statusEl.textContent = "error: " + e.message;
   } finally {
     btn.disabled = false;
+    _modelSelectDirty = false;  // LOAD complete — allow poll to sync model dropdown again
     updateLoadButton();
   }
 }
