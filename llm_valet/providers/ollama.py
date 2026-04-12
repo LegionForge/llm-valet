@@ -386,27 +386,50 @@ class OllamaProvider(LLMProvider):
 
 def _svcmgr_start() -> bool:
     """Start Ollama via the platform service manager. Returns True on success."""
-    if sys.platform == "darwin":
-        try:
-            from svcmgr.macos import start_service
-            return start_service()
-        except Exception as exc:
-            logger.warning("svcmgr.start_service unavailable", extra={"error": str(exc)})
-    # Linux/Windows: no svcmgr wired yet — log and let health-check loop handle it
-    logger.info("no svcmgr for this platform — assuming Ollama will start externally")
-    return True
+    _mod = _svcmgr_module()
+    if _mod is None:
+        logger.info("no svcmgr available for this platform — assuming Ollama will start externally")
+        return True
+    try:
+        return _mod.start_service()
+    except Exception as exc:
+        logger.warning("svcmgr.start_service raised", extra={"error": str(exc)})
+        return True  # let health-check loop determine actual state
 
 
 def _svcmgr_stop() -> bool:
     """Stop Ollama via the platform service manager. Returns True on success."""
-    if sys.platform == "darwin":
-        try:
-            from svcmgr.macos import stop_service
-            return stop_service()
-        except Exception as exc:
-            logger.warning("svcmgr.stop_service unavailable", extra={"error": str(exc)})
-    logger.info("no svcmgr for this platform — relying on psutil fallback")
-    return False
+    _mod = _svcmgr_module()
+    if _mod is None:
+        logger.info("no svcmgr available for this platform — relying on psutil fallback")
+        return False
+    try:
+        return _mod.stop_service()
+    except Exception as exc:
+        logger.warning("svcmgr.stop_service raised", extra={"error": str(exc)})
+        return False  # psutil fallback will take over
+
+
+def _svcmgr_module():  # type: ignore[return]
+    """
+    Return the platform-appropriate svcmgr module, or None if unavailable.
+
+    Importing here (not at module top) keeps Linux/Windows imports out of
+    macOS's namespace and vice versa — each module uses platform-only stdlib.
+    """
+    try:
+        if sys.platform == "darwin":
+            import svcmgr.macos as _m
+            return _m
+        if sys.platform == "linux":
+            import svcmgr.linux as _m
+            return _m
+        if sys.platform == "win32":
+            import svcmgr.windows as _m
+            return _m
+    except ImportError as exc:
+        logger.warning("svcmgr module import failed", extra={"error": str(exc)})
+    return None
 
 
 def _find_ollama_process() -> psutil.Process | None:
