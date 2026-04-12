@@ -386,7 +386,27 @@ class TestPostLoad:
     def test_calls_provider_load_model(self, api: tuple) -> None:
         client, mock_provider, _ = api
         client.post("/load", json={"model": "test:model"})
-        mock_provider.load_model.assert_called_once_with("test:model")
+        mock_provider.load_model.assert_called_once_with("test:model", num_ctx=None)
+
+    def test_calls_provider_load_model_with_num_ctx(self, api: tuple) -> None:
+        client, mock_provider, _ = api
+        client.post("/load", json={"model": "test:model", "num_ctx": 4096})
+        mock_provider.load_model.assert_called_once_with("test:model", num_ctx=4096)
+
+    def test_num_ctx_in_response(self, api: tuple) -> None:
+        client, _, _ = api
+        r = client.post("/load", json={"model": "test:model", "num_ctx": 8192})
+        assert r.json()["num_ctx"] == 8192
+
+    def test_num_ctx_below_512_returns_422(self, api: tuple) -> None:
+        client, _, _ = api
+        r = client.post("/load", json={"model": "test:model", "num_ctx": 256})
+        assert r.status_code == 422
+
+    def test_num_ctx_non_integer_returns_422(self, api: tuple) -> None:
+        client, _, _ = api
+        r = client.post("/load", json={"model": "test:model", "num_ctx": "4096"})
+        assert r.status_code == 422
 
     def test_missing_model_field_returns_422(self, api: tuple) -> None:
         client, _, _ = api

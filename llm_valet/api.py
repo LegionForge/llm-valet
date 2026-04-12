@@ -292,10 +292,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         model_name = body.get("model", "")
         if not isinstance(model_name, str) or not model_name:
             raise HTTPException(status_code=422, detail="model field required")
-        success = await p.load_model(model_name)
+        raw_ctx = body.get("num_ctx")
+        num_ctx: int | None = None
+        if raw_ctx is not None:
+            if not isinstance(raw_ctx, int) or raw_ctx < 512:
+                raise HTTPException(status_code=422, detail="num_ctx must be an integer >= 512")
+            num_ctx = raw_ctx
+        success = await p.load_model(model_name, num_ctx=num_ctx)
         if success:
             w.notify_manual_resume()
-        return {"ok": success, "action": "load", "model": model_name}
+        return {"ok": success, "action": "load", "model": model_name, "num_ctx": num_ctx}
 
     @app.delete("/models/{model_name}")
     async def delete_model(
@@ -327,7 +333,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if disk.free_mb < _MIN_FREE_MB:
             raise HTTPException(
                 status_code=507,
-                detail=f"Insufficient disk space — {disk.free_mb} MB free, {_MIN_FREE_MB} MB required",
+                detail=(
+                    f"Insufficient disk space — "
+                    f"{disk.free_mb} MB free, {_MIN_FREE_MB} MB required"
+                ),
             )
         success = await p.pull_model(model_name)
         return {"ok": success, "action": "pull", "model": model_name}
