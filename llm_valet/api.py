@@ -292,10 +292,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         model_name = body.get("model", "")
         if not isinstance(model_name, str) or not model_name:
             raise HTTPException(status_code=422, detail="model field required")
-        success = await p.load_model(model_name)
+        raw_ctx = body.get("num_ctx")
+        num_ctx: int | None = None
+        if raw_ctx is not None:
+            if not isinstance(raw_ctx, int) or raw_ctx < 512:
+                raise HTTPException(status_code=422, detail="num_ctx must be an integer >= 512")
+            num_ctx = raw_ctx
+        success = await p.load_model(model_name, num_ctx=num_ctx) if num_ctx else await p.load_model(model_name)
         if success:
             w.notify_manual_resume()
-        return {"ok": success, "action": "load", "model": model_name}
+        return {"ok": success, "action": "load", "model": model_name, "num_ctx": num_ctx}
 
     @app.delete("/models/{model_name}")
     async def delete_model(
