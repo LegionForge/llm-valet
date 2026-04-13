@@ -337,6 +337,36 @@ class OllamaProvider(LLMProvider):
             logger.error("delete_model request failed", extra={"error": str(exc)})
             return False
 
+    async def force_pause(self) -> bool:
+        """
+        Force-evict the model by killing ollama runner subprocesses directly.
+
+        Used when pause() is blocked by an active inference request — the runner
+        process is the Ollama subprocess that handles model inference; killing it
+        interrupts the inference without stopping the Ollama service itself.
+
+        Captures model metadata before killing so resume() can restore state.
+        Falls back to regular pause() if no runner processes are found.
+        """
+        # Capture model info while /api/ps is still populated.
+        # After the runner is killed, /api/ps returns empty.
+        current = await self.status()
+        if current.model_name:
+            self._last_loaded_model = current.model_name
+        self._last_loaded_ctx = current.loaded_context_length
+
+        killed = _kill_ollama_runners()
+        if killed > 0:
+            logger.info("force_pause: killed runner processes", extra={"count": killed})
+            # Brief pause for Ollama to update its internal state before callers poll /api/ps
+            await asyncio.sleep(0.5)
+            return True
+
+        # No runner processes found — model may already be unloaded or not using a
+        # runner subprocess on this platform; fall back to regular keep_alive=0 eviction.
+        logger.info("force_pause: no runner processes found — falling back to pause()")
+        return await self.pause()
+
     async def pull_model(self, model_name: str) -> bool:
         """Pull (download) a model via POST /api/pull. Blocks until complete."""
         if not _MODEL_NAME_RE.match(model_name):
@@ -462,6 +492,49 @@ def _find_ollama_process() -> psutil.Process | None:
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
     return None
+
+
+def _is_ollama_runner(proc: psutil.Process) -> bool:
+    """
+    Validate that a process is an Ollama inference runner, not the server.
+
+    Runner processes are spawned by Ollama to serve a loaded model.  Killing
+    them interrupts active inference without stopping the Ollama service.
+
+    Detection covers two patterns:
+      - Binary named 'ollama_llama_runner' (macOS App bundle / Windows .exe)
+      - Ollama binary invoked with a 'runner' subcommand (some Linux installs)
+        but NOT with 'serve' — that would be the server itself.
+    """
+    try:
+        name = (proc.name() or "").lower()
+        exe = (proc.exe() or "").lower()
+        cmdline = proc.cmdline()
+        if "ollama_llama_runner" in name or "ollama_llama_runner" in exe:
+            return True
+        # Ollama binary as runner subcommand — must not be the serve process
+        if "ollama" in exe and any("runner" in arg.lower() for arg in cmdline):
+            if not any("serve" in arg.lower() for arg in cmdline):
+                return True
+        return False
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        return False
+
+
+def _kill_ollama_runners() -> int:
+    """
+    Kill ollama runner subprocesses. Returns the count of processes killed.
+    Uses psutil.kill() — no shell, no subprocess, no injection surface.
+    """
+    killed = 0
+    for proc in psutil.process_iter(["pid", "name", "exe", "cmdline"]):
+        try:
+            if _is_ollama_runner(proc):
+                proc.kill()
+                killed += 1
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+    return killed
 
 
 def _is_ollama_process(proc: psutil.Process) -> bool:
