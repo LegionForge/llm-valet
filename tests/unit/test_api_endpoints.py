@@ -80,6 +80,7 @@ def _make_mock_provider(status: ProviderStatus | None = None) -> MagicMock:
     p.load_model    = AsyncMock(return_value=True)
     p.delete_model  = AsyncMock(return_value=True)
     p.pull_model    = AsyncMock(return_value=True)
+    p.force_pause   = AsyncMock(return_value=True)
     return p
 
 
@@ -201,7 +202,7 @@ class TestGetStatus:
         client, _, _ = api
         data = client.get("/status").json()
         assert "version" in data
-        assert data["version"] == "0.5.0"
+        assert data["version"] == "0.5.1"
 
     def test_provider_running_and_loaded(self, api: tuple) -> None:
         client, mock_provider, _ = api
@@ -523,6 +524,69 @@ class TestAuth:
         client, _, _ = api
         r = client.get("/status")
         assert r.status_code == 200
+
+    def test_correct_api_key_on_force_pause_allowed(self, api: tuple) -> None:
+        client, _, _ = api
+        r = client.post("/pause/force")
+        assert r.status_code == 200
+
+
+# ── POST /pause/force ─────────────────────────────────────────────────────────
+
+class TestPostForcePause:
+    def test_returns_200(self, api: tuple) -> None:
+        client, _, _ = api
+        r = client.post("/pause/force")
+        assert r.status_code == 200
+
+    def test_calls_provider_force_pause(self, api: tuple) -> None:
+        client, mock_provider, _ = api
+        client.post("/pause/force")
+        mock_provider.force_pause.assert_called_once()
+
+    def test_response_ok_true_on_success(self, api: tuple) -> None:
+        client, mock_provider, _ = api
+        mock_provider.force_pause.return_value = True
+        data = client.post("/pause/force").json()
+        assert data["ok"] is True
+        assert data["action"] == "force_pause"
+
+    def test_response_ok_false_on_failure(self, api: tuple) -> None:
+        client, mock_provider, _ = api
+        mock_provider.force_pause.return_value = False
+        data = client.post("/pause/force").json()
+        assert data["ok"] is False
+
+    def test_watchdog_synced_after_force_pause(self, api: tuple) -> None:
+        """Successful force_pause must sync watchdog to PAUSED — same contract as /pause."""
+        client, mock_provider, _ = api
+        mock_provider.force_pause.return_value = True
+        client.post("/pause/force")
+        data = client.get("/status").json()
+        assert data["watchdog"]["state"] == WatchdogState.PAUSED.value
+
+    def test_watchdog_not_synced_on_failure(self, api: tuple) -> None:
+        """If force_pause fails, watchdog must not move to PAUSED."""
+        client, mock_provider, _ = api
+        mock_provider.force_pause.return_value = False
+        client.post("/pause/force")
+        data = client.get("/status").json()
+        assert data["watchdog"]["state"] == WatchdogState.RUNNING.value
+
+
+# ── POST /stop/force — non-blocking ──────────────────────────────────────────
+
+class TestPostForceStop:
+    def test_returns_200_immediately(self, api: tuple) -> None:
+        client, _, _ = api
+        r = client.post("/stop/force")
+        assert r.status_code == 200
+
+    def test_response_has_ok_and_action(self, api: tuple) -> None:
+        client, _, _ = api
+        data = client.post("/stop/force").json()
+        assert data["ok"] is True
+        assert data["action"] == "force_stop"
 
     def test_wrong_api_key_returns_401(self) -> None:
         """Correct api_key set in settings but wrong key in header → 401."""
