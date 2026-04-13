@@ -1350,7 +1350,7 @@ function renderControls(p, w) {
     // Intentionally does NOT check wState — if pause() timed out, watchdog stays RUNNING
     // but the model is stuck and the user still needs the force option.
     const showForce = _pauseStartTime !== null && loaded && elapsed >= 10000;
-    forceEl.style.display = showForce ? "" : "none";
+    forceEl.style.display = showForce ? "inline-block" : "none";
   }
 }
 
