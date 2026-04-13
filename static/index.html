@@ -1346,7 +1346,10 @@ function renderControls(p, w) {
   const forceEl = document.getElementById("btn-force-pause");
   if (forceEl) {
     const elapsed = _pauseStartTime ? (Date.now() - _pauseStartTime) : 0;
-    const showForce = (wState === "paused" || _pendingAction === "stopping") && loaded && elapsed >= 10000;
+    // Show if a pause/stop was attempted, model is still loaded, and 10s have elapsed.
+    // Intentionally does NOT check wState — if pause() timed out, watchdog stays RUNNING
+    // but the model is stuck and the user still needs the force option.
+    const showForce = _pauseStartTime !== null && loaded && elapsed >= 10000;
     forceEl.style.display = showForce ? "" : "none";
   }
 }
