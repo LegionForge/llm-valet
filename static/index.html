@@ -214,6 +214,14 @@
     cursor: pointer;
   }
 
+  /* ── Force pause button ─────────────────────────────────────────────────── */
+  #btn-force-pause {
+    display: none;
+    color: var(--yellow);
+    border-color: var(--yellow);
+  }
+  #btn-force-pause:hover { border-color: var(--red); color: var(--red); }
+
   /* ── Error banner ────────────────────────────────────────────────────────── */
   #error-banner {
     display: none;
@@ -504,6 +512,8 @@
             title="Unload model, then shut down the LLM Provider service.">STOP</button>
     <button id="btn-restart" onclick="action('restart')"
             title="Restart the LLM Provider service. Does not reload model — use LOAD or RESUME after.">RESTART SVC</button>
+    <button id="btn-force-pause" onclick="forcePause()"
+            title="Force-evict the model by killing the inference runner process. Use this when PAUSE is blocked by an active request — the model will be unloaded immediately, interrupting any in-progress inference.">FORCE PAUSE</button>
   </div>
 </section>
 
@@ -600,6 +610,7 @@ let _refreshMs = 5000;
 let _lastProvider = null;   // last known provider state from poll
 let _lastWatchdog = null;   // last known watchdog state from poll
 let _pendingAction = null;  // "stopping"|"starting"|"restarting" while async op in flight
+let _pauseStartTime = null; // monotonic ms when PAUSE/STOP was last initiated — drives force button timer
 const _draggingSliders = new Set();  // slider IDs currently held by the user — skip sync while dragging
 let _savingConfig = false;           // PUT to /config in flight — block poll sync until write completes
 let _modelSelectDirty = false;       // user has chosen a model that hasn't been loaded yet — don't overwrite with server state
@@ -1255,6 +1266,8 @@ async function action(name) {
   if (name === "stop")    _pendingAction = "stopping";
   if (name === "start")   _pendingAction = "starting";
   if (name === "restart") _pendingAction = "restarting";
+  // Record when a pause/stop was initiated so the force button timer can start
+  if (name === "pause" || name === "stop") _pauseStartTime = Date.now();
 
   setButtonsDisabled(true);
   const lastEl = document.getElementById("last-action");
@@ -1269,6 +1282,26 @@ async function action(name) {
     lastEl.textContent = name.toUpperCase() + " — error: " + e.message;
   } finally {
     // Re-enable buttons based on last known state; fallback to all-on if unknown
+    renderControls(_lastProvider, _lastWatchdog);
+  }
+}
+
+async function forcePause() {
+  const forceEl = document.getElementById("btn-force-pause");
+  if (forceEl) forceEl.disabled = true;
+  setButtonsDisabled(true);
+  const lastEl = document.getElementById("last-action");
+  lastEl.textContent = "FORCE PAUSE...";
+  try {
+    const r = await apiFetch("/pause/force", { method: "POST" });
+    const data = await r.json();
+    lastEl.textContent = "FORCE PAUSE — " + (data.ok ? "ok" : "failed");
+    _pauseStartTime = null;
+    await poll();
+  } catch (e) {
+    lastEl.textContent = "FORCE PAUSE — error: " + e.message;
+  } finally {
+    if (forceEl) forceEl.disabled = false;
     renderControls(_lastProvider, _lastWatchdog);
   }
 }
@@ -1306,6 +1339,19 @@ function renderControls(p, w) {
 
   const restartEl = document.getElementById("btn-restart");
   if (restartEl) restartEl.disabled = !running;
+
+  // FORCE PAUSE: visible only when paused (or stop in flight) and model still loaded after 10s.
+  // Once the model is actually unloaded, reset the timer so the button disappears.
+  if (!loaded) _pauseStartTime = null;
+  const forceEl = document.getElementById("btn-force-pause");
+  if (forceEl) {
+    const elapsed = _pauseStartTime ? (Date.now() - _pauseStartTime) : 0;
+    // Show if a pause/stop was attempted, model is still loaded, and 10s have elapsed.
+    // Intentionally does NOT check wState — if pause() timed out, watchdog stays RUNNING
+    // but the model is stuck and the user still needs the force option.
+    const showForce = _pauseStartTime !== null && loaded && elapsed >= 10000;
+    forceEl.style.display = showForce ? "inline-block" : "none";
+  }
 }
 
 // ── Config ────────────────────────────────────────────────────────────────────

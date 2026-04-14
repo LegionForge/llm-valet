@@ -2,6 +2,19 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Testing — Live Doc Updates (Non-Negotiable)
+
+When executing or reviewing Mac Mini tests, update `docs/testing/<version>-mac-mini.md` immediately when each test passes or fails — do not batch updates until the end of a session:
+
+- Mark each check row `✅` (pass) or `❌` (fail) in the Pass? column, with a Notes entry for anything non-obvious
+- Update the Results summary table at the bottom of the file after each test group completes
+- If a bug is found during testing, note the commit that fixed it in the relevant check row
+- Change the Results header from "TBD" to "In Progress" once testing begins, and to "COMPLETE" with overall outcome once all tests are done
+
+This applies whether tests are run interactively via SSH or by reviewing session notes.
+
+---
+
 ## GitHub Pre-commit Scrub Rules
 
 Before committing or creating a PR, verify these are NOT present in any tracked file:

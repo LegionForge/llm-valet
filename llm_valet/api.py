@@ -23,7 +23,7 @@ from llm_valet.watchdog import Watchdog
 
 logger = logging.getLogger(__name__)
 
-_VERSION = "0.5.0"
+_VERSION = "0.5.1"
 
 
 class _RateLimiter:
@@ -270,6 +270,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             w.notify_manual_pause()
         return {"ok": success, "action": "pause"}
 
+    @app.post("/pause/force")
+    async def post_pause_force(
+        _: Auth,
+        p: Annotated[LLMProvider, Depends(get_provider)],
+        w: Annotated[Watchdog, Depends(get_watchdog)],
+    ) -> dict[str, Any]:
+        """Force pause — kills inference runner process directly.
+        Use when normal pause is blocked by an active inference request."""
+        success = await p.force_pause()
+        if success:
+            w.notify_manual_pause()
+        return {"ok": success, "action": "force_pause"}
+
     @app.post("/resume")
     async def post_resume(
         _: Auth,
@@ -351,6 +364,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         success = await p.pull_model(model_name)
         return {"ok": success, "action": "pull", "model": model_name}
+
+    @app.post("/stop/force")
+    async def post_stop_force(
+        _: Auth,
+        p: Annotated[LLMProvider, Depends(get_provider)],
+        background_tasks: BackgroundTasks,
+    ) -> dict[str, Any]:
+        """Force stop — kills inference runner then stops the service.
+        Returns immediately; poll /status for result."""
+        # Reuse the /stop rate-limit key — both are destructive service operations
+        rate_limiter.check("stop", 3.0)
+        async def _force_stop() -> None:
+            await p.force_pause()
+            await p.stop()
+        background_tasks.add_task(_force_stop)
+        return {"ok": True, "action": "force_stop"}
 
     @app.post("/start")
     async def post_start(
