@@ -118,16 +118,32 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.info("llm-valet starting", extra={"host": settings.host, "port": settings.port})
-        # Warn if the default ram_pause_pct may be too low for the configured model.
-        # Apple Silicon unified memory means a 7B model can use 5-8 GB; on a 16 GB
-        # machine that's already 30-50% of RAM before the threshold is reached.
-        if settings.thresholds.ram_pause_pct >= 85.0:
-            logger.warning(
-                "ram_pause_pct is at default (85%%) — consider lowering it to match "
-                "your model size. A 7B model on 16 GB uses ~50%% RAM; 85%% leaves "
-                "little headroom before the watchdog pauses.",
-                extra={"ram_pause_pct": settings.thresholds.ram_pause_pct},
-            )
+        # If a model is already loaded and its memory footprint exceeds the RAM pause
+        # threshold, the watchdog's auto-pause will never fire — the threshold is already
+        # breached before any additional load arrives.  Warn immediately so the user can
+        # raise ram_pause_pct above the model's baseline.
+        try:
+            ps = await provider.status()
+            if ps.model_loaded and ps.memory_used_mb is not None:
+                metrics = collector.collect()
+                threshold_mb = metrics.memory.total_mb * (settings.thresholds.ram_pause_pct / 100)
+                if ps.memory_used_mb > threshold_mb:
+                    used_pct = round(ps.memory_used_mb / metrics.memory.total_mb * 100, 1)
+                    logger.warning(
+                        "overcommit at startup — loaded model exceeds RAM pause threshold; "
+                        "watchdog auto-pause will not trigger. "
+                        "Raise ram_pause_pct above %.1f%% or unload the model.",
+                        used_pct,
+                        extra={
+                            "model": ps.model_name,
+                            "model_mb": ps.memory_used_mb,
+                            "model_pct": used_pct,
+                            "ram_pause_pct": settings.thresholds.ram_pause_pct,
+                        },
+                    )
+        except Exception:
+            # Ollama may not be reachable yet at startup — skip the check silently.
+            pass
         watchdog_task = asyncio.create_task(watchdog.run(), name="watchdog")
         try:
             yield
