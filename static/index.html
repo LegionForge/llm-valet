@@ -609,7 +609,7 @@ let _modelMeta = {};   // name → { size_mb, context_length }
 let _refreshMs = 5000;
 let _lastProvider = null;   // last known provider state from poll
 let _lastWatchdog = null;   // last known watchdog state from poll
-let _pendingAction = null;  // "stopping"|"starting"|"restarting" while async op in flight
+let _pendingAction = null;  // "pausing"|"resuming"|"stopping"|"starting"|"restarting" while async op in flight
 let _pauseStartTime = null; // monotonic ms when PAUSE/STOP was last initiated — drives force button timer
 const _draggingSliders = new Set();  // slider IDs currently held by the user — skip sync while dragging
 let _savingConfig = false;           // PUT to /config in flight — block poll sync until write completes
@@ -802,15 +802,21 @@ function renderState(p, w) {
   const lastEl = document.getElementById("last-action");
 
   // Clear pending action once state reaches expected outcome
-  if (_pendingAction === "stopping" && !p.running) _pendingAction = null;
-  if (_pendingAction === "starting" && p.running)  _pendingAction = null;
-  if (_pendingAction === "restarting" && p.running) _pendingAction = null;
+  if (_pendingAction === "pausing"   && !p.model_loaded)  _pendingAction = null;
+  if (_pendingAction === "resuming"  && p.model_loaded)   _pendingAction = null;
+  if (_pendingAction === "stopping"  && !p.running)       _pendingAction = null;
+  if (_pendingAction === "starting"  && p.running)        _pendingAction = null;
+  if (_pendingAction === "restarting"&& p.running)        _pendingAction = null;
 
   let label, cls;
-  if (_pendingAction === "stopping") {
+  if (_pendingAction === "pausing") {
+    label = "PAUSING";  cls = "paused";
+  } else if (_pendingAction === "resuming") {
+    label = "RESUMING"; cls = "running";
+  } else if (_pendingAction === "stopping") {
     label = "STOPPING"; cls = "paused";
   } else if (_pendingAction === "starting" || _pendingAction === "restarting") {
-    label = "STARTING"; cls = "paused";
+    label = "STARTING"; cls = "running";
   } else if (!p.running) {
     label = "STOPPED"; cls = "stopped";
   } else if (p.model_loaded) {
@@ -825,7 +831,9 @@ function renderState(p, w) {
   badge.className = "badge " + cls;
   const stateTips = {
     RUNNING:   "Ollama is running and a model is loaded in memory — ready to serve requests.",
+    PAUSING:   "Unloading the model from memory. Takes a few seconds — longer if an inference is in progress.",
     PAUSED:    "Model has been unloaded from memory. Ollama is still running. Click RESUME to reload the model.",
+    RESUMING:  "Reloading the model into memory. Ready in a few seconds.",
     IDLE:      "Ollama is running but no model is loaded. Select a model and click LOAD, or click RESUME if one was previously loaded.",
     STOPPED:   "Ollama service is not running. Click START SVC to start it. No requests can be served.",
     STOPPING:  "Ollama is shutting down — unloading model and stopping the service.",
@@ -1263,6 +1271,8 @@ async function pullModel() {
 
 async function action(name) {
   // Track async operations so the badge shows a transitioning state while polling
+  if (name === "pause")   _pendingAction = "pausing";
+  if (name === "resume")  _pendingAction = "resuming";
   if (name === "stop")    _pendingAction = "stopping";
   if (name === "start")   _pendingAction = "starting";
   if (name === "restart") _pendingAction = "restarting";
@@ -1316,6 +1326,10 @@ function setButtonsDisabled(disabled) {
 function renderControls(p, w) {
   // If state is unknown (startup / error), re-enable everything
   if (!p) { setButtonsDisabled(false); return; }
+
+  // Keep all action buttons disabled while any transition is in flight.
+  // Prevents re-enabling mid-transition when poll ticks between action and completion.
+  if (_pendingAction) { setButtonsDisabled(true); return; }
 
   const running = p.running;
   const loaded  = p.model_loaded;
