@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from starlette.testclient import TestClient
 
-from llm_valet.api import create_app
+from llm_valet.api import _VERSION, create_app
 from llm_valet.config import Settings
 from llm_valet.providers.base import ModelInfo, ProviderStatus
 from llm_valet.resources.base import (
@@ -202,7 +202,7 @@ class TestGetStatus:
         client, _, _ = api
         data = client.get("/status").json()
         assert "version" in data
-        assert data["version"] == "0.5.1"
+        assert data["version"] == _VERSION
 
     def test_provider_running_and_loaded(self, api: tuple) -> None:
         client, mock_provider, _ = api
