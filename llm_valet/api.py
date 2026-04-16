@@ -141,9 +141,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                             "ram_pause_pct": settings.thresholds.ram_pause_pct,
                         },
                     )
-        except Exception:
-            # Ollama may not be reachable yet at startup — skip the check silently.
-            pass
+        except Exception as exc:
+            # Ollama may not be reachable yet at startup — not an error condition.
+            logger.debug("startup overcommit check skipped: %s", exc)
         watchdog_task = asyncio.create_task(watchdog.run(), name="watchdog")
         try:
             yield
