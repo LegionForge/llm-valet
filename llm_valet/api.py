@@ -184,7 +184,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # ── Static files ──────────────────────────────────────────────────────────
 
-    static_dir = Path(__file__).parent.parent / "static"
+    # static/ lives inside the package so it is included in pip/git installs.
+    # parent.parent pointed at the repo root in dev but missed site-packages installs.
+    static_dir = Path(__file__).parent / "static"
     if static_dir.is_dir():
         app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
