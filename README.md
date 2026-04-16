@@ -2,7 +2,7 @@
 
 > Cross-platform drop-in utility that manages Ollama (and other LLM providers) lifecycle based on manual control or automatic resource/activity sensing.
 
-**Platforms:** macOS · Windows · Linux
+**Platforms:** macOS · Windows
 
 ---
 
@@ -147,18 +147,30 @@ Additional mitigations: `TrustedHostMiddleware` (DNS rebinding), strict CORS (no
 
 llm-valet manages Ollama — Ollama must be installed and running before you install llm-valet.
 
-**macOS (Homebrew — recommended):**
+### macOS
+
+<details>
+<summary><strong>Homebrew</strong> (recommended)</summary>
+
 ```bash
 brew install ollama
 brew services start ollama
 ```
 
-**Linux:**
-```bash
-curl -fsSL https://ollama.com/install.sh | sh
-```
+</details>
 
-**Windows:** Download the installer from [ollama.com](https://ollama.com/download).
+<details>
+<summary><strong>Direct download</strong></summary>
+
+Visit **[ollama.com](https://ollama.com)** and download the macOS installer. Run the `.dmg`, drag Ollama to Applications, and launch it from there. Ollama runs as a menu bar app and starts its local server automatically.
+
+</details>
+
+### Windows
+
+Visit **[ollama.com](https://ollama.com)** and download the Windows installer.
+
+---
 
 Verify Ollama is running before continuing:
 ```bash

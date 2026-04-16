@@ -96,7 +96,8 @@ if [[ -f "$REPO_ROOT/pyproject.toml" ]]; then
   ok "Local repo detected — installing from source"
   "$VENV_PY" -m pip install --quiet -e "$REPO_ROOT"
 else
-  "$VENV_PY" -m pip install --quiet --upgrade "$PACKAGE"
+  # Not a local clone — install directly from GitHub (PyPI publish tracked for v0.6.0)
+  "$VENV_PY" -m pip install --quiet "git+https://github.com/LegionForge/llm-valet.git"
 fi
 ok "Installed $("$VENV_PY" -m pip show llm-valet 2>/dev/null | awk '/^Version:/{print $2}')"
 
