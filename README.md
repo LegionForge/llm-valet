@@ -145,7 +145,54 @@ Additional mitigations: `TrustedHostMiddleware` (DNS rebinding), strict CORS (no
 
 ## Prerequisites
 
-llm-valet manages Ollama — Ollama must be installed and running before you install llm-valet.
+llm-valet requires **Python 3.11+** and **Ollama**. Both must be present before running the installer.
+
+### Python 3.11+
+
+Any Python 3.11 or newer install works — source doesn't matter.
+
+<details>
+<summary><strong>macOS</strong></summary>
+
+```bash
+brew install python
+```
+
+> **Note:** `brew install ollama` installs `python@3.14` automatically as part of its dependency chain (via Apple's MLX framework). If you installed Ollama via Homebrew, Python is already present. If you installed Ollama via direct download, run the command above.
+
+</details>
+
+<details>
+<summary><strong>Windows</strong></summary>
+
+Download and install Python from **[python.org](https://python.org)** or the Microsoft Store. Python is not pre-installed on Windows.
+
+During installation, check **"Add Python to PATH"**.
+
+</details>
+
+<details>
+<summary><strong>Linux</strong></summary>
+
+Python 3 ships pre-installed on most distributions. Verify your version:
+
+```bash
+python3 --version   # must be 3.11 or newer
+```
+
+If below 3.11:
+```bash
+# Ubuntu/Debian
+sudo apt install python3
+```
+
+</details>
+
+---
+
+### Ollama
+
+llm-valet manages Ollama — it must be installed and running before you install llm-valet.
 
 ### macOS
 
@@ -172,9 +219,10 @@ Visit **[ollama.com](https://ollama.com)** and download the Windows installer.
 
 ---
 
-Verify Ollama is running before continuing:
+Verify both prerequisites are met before continuing:
 ```bash
-ollama list   # should return an empty table, not an error
+python3 --version   # expect 3.11 or newer
+ollama list         # should return an empty table, not an error
 ```
 
 ---
