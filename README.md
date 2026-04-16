@@ -145,11 +145,11 @@ Additional mitigations: `TrustedHostMiddleware` (DNS rebinding), strict CORS (no
 
 ## Prerequisites
 
-llm-valet requires **Python 3.11+** and **Ollama**. Both must be present before running the installer.
+llm-valet requires **Python 3.11 or newer** and **Ollama**. Both must be present before running the installer.
 
 ### Python 3.11+
 
-Any Python 3.11 or newer install works — source doesn't matter.
+Python 3.11 or newer. If you don't have Python installed, download the latest release from **[python.org/downloads](https://python.org/downloads)** — the website always shows the current recommended version at the top.
 
 <details>
 <summary><strong>macOS</strong></summary>
