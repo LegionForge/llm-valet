@@ -142,8 +142,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         },
                     )
         except Exception as exc:
-            # Ollama may not be reachable yet at startup — not an error condition.
-            logger.debug("startup overcommit check skipped: %s", exc)
+            # provider.status() or collector.collect() raised — Ollama is not reachable
+            # yet at startup. The if-checks above are never reached in this case.
+            # Not an error: valet starts regardless and the watchdog will retry on its
+            # normal interval once Ollama comes up.
+            logger.debug("startup overcommit check skipped (provider unreachable): %s", exc)
         watchdog_task = asyncio.create_task(watchdog.run(), name="watchdog")
         try:
             yield

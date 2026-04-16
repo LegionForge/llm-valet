@@ -591,6 +591,35 @@ If Ruff, Bandit, and mypy are all clean, and the AI claims there is a critical v
 
 ---
 
+## Built With
+
+llm-valet stands on the shoulders of these open source projects:
+
+| Dependency | Role | License |
+|---|---|---|
+| [FastAPI](https://fastapi.tiangolo.com) | HTTP API framework — routing, middleware, OpenAPI docs generation | MIT |
+| [Starlette](https://www.starlette.io) | ASGI foundation beneath FastAPI — request/response, middleware layer | BSD |
+| [Pydantic](https://docs.pydantic.dev) | Data validation — enforces types on config and API payloads | MIT |
+| [uvicorn](https://www.uvicorn.org) | ASGI server — runs the FastAPI app, handles HTTP connections | BSD |
+| [httpx](https://www.python-httpx.org) | Async HTTP client — all communication with the Ollama provider API | BSD |
+| [psutil](https://github.com/giampaolo/psutil) | Cross-platform process and system metrics — RAM, CPU, process enumeration | BSD |
+| [PyYAML](https://pyyaml.org) | Config file parsing (`~/.llm-valet/config.yaml`) | MIT |
+| [pynvml](https://github.com/gpuopenanalytics/pynvml) | NVIDIA GPU metrics on Linux/Windows (optional) | BSD |
+
+**Development toolchain:**
+
+| Tool | Role |
+|---|---|
+| [Ruff](https://docs.astral.sh/ruff/) | Linting and import sorting |
+| [Bandit](https://bandit.readthedocs.io) | Python security SAST |
+| [mypy](https://mypy.readthedocs.io) | Static type checking (strict mode) |
+| [semgrep](https://semgrep.dev) | Broader SAST — OWASP + FastAPI rulesets |
+| [pip-audit](https://pypi.org/project/pip-audit/) | Dependency CVE scanning |
+| [pytest](https://pytest.org) | Test runner + coverage enforcement |
+| [pre-commit](https://pre-commit.com) | Git hook runner — enforces lint/type checks before every commit |
+
+---
+
 ## License
 
 MIT License — Copyright (c) 2026 [LegionForge](https://github.com/LegionForge) · jp@legionforge.org
