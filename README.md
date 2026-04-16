@@ -143,25 +143,63 @@ Additional mitigations: `TrustedHostMiddleware` (DNS rebinding), strict CORS (no
 
 ---
 
+## Prerequisites
+
+llm-valet manages Ollama — Ollama must be installed and running before you install llm-valet.
+
+**macOS (Homebrew — recommended):**
+```bash
+brew install ollama
+brew services start ollama
+```
+
+**Linux:**
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+```
+
+**Windows:** Download the installer from [ollama.com](https://ollama.com/download).
+
+Verify Ollama is running before continuing:
+```bash
+ollama list   # should return an empty table, not an error
+```
+
+---
+
+## Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/LegionForge/llm-valet/main/install/install.sh | bash
+```
+
+The installer:
+- Creates an isolated Python environment at `~/.llm-valet/`
+- Writes a default config to `~/.llm-valet/config.yaml`
+- Registers a user-level auto-start service (launchd on macOS, systemd on Linux)
+
+Once installed, the WebUI is at `http://localhost:8765` and the service starts automatically at login.
+
+**To uninstall:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/LegionForge/llm-valet/main/install/uninstall.sh | bash
+```
+
+Pass `--purge` to also remove your config and logs.
+
+---
+
 ## Quick Start
 
 ```bash
-pip install llm-valet
-
-# Run (localhost only — default, no auth required)
-uvicorn llm_valet.api:app --host 127.0.0.1 --port 8765
-
-open http://localhost:8765        # WebUI
-open http://localhost:8765/docs   # API docs
-```
-
-```bash
-# Manual control
+# Check status
 curl http://localhost:8765/status
+
+# Manual control
 curl -X POST http://localhost:8765/pause
 curl -X POST http://localhost:8765/resume
 
-# LAN access (X-API-Key required)
+# LAN access (X-API-Key required — set api_key in config first)
 curl -H "X-API-Key: your-key" -X POST http://mac-mini.local:8765/pause
 ```
 
