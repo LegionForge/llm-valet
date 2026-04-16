@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "llm-valet"
-version = "0.5.2"
+version = "0.5.3"
 description = "Cross-platform LLM lifecycle manager with resource-pressure and gaming-detection autopause"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -71,6 +71,9 @@ dev = [
     "semgrep>=1.70",
     # git hooks
     "pre-commit>=3.7",
+    # UI / browser tests (requires: playwright install chromium)
+    "playwright>=1.40",
+    "pytest-playwright>=0.4",
 ]
 
 [tool.ruff]
@@ -109,8 +112,11 @@ llm-valet = "llm_valet.api:main"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-addopts = "--cov=llm_valet --cov-report=term-missing --cov-fail-under=60"
+addopts = "--cov=llm_valet --cov-report=term-missing --cov-fail-under=60 --ignore=tests/ui"
 testpaths = ["tests"]
+markers = [
+    "ui: Playwright browser tests — require 'playwright install chromium' (deselected by default)",
+]
 
 [tool.coverage.run]
 source = ["llm_valet"]

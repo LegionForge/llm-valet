@@ -1027,17 +1027,23 @@ function _fmtCtx(n) {
 // ── Context window selector ───────────────────────────────────────────────────
 
 // Common context sizes to offer as options. Filtered to ≤ model's max at render time.
-const _CTX_OPTIONS = [512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072];
+// Powers of 2 up to 1M — covers qwen3.5 (256K), mistral-nemo (1M RoPE ceiling), etc.
+const _CTX_OPTIONS = [512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576];
 
 function _fmtCtxLabel(n) {
-  if (n >= 131072) return "128K tokens";
-  if (n >= 65536)  return "64K tokens";
-  if (n >= 32768)  return "32K tokens";
-  if (n >= 16384)  return "16K tokens";
-  if (n >= 8192)   return "8K tokens";
-  if (n >= 4096)   return "4K tokens";
-  if (n >= 2048)   return "2K tokens";
-  if (n >= 1024)   return "1K tokens";
+  // Uses integer division by 1024 for accurate power-of-2 labels — mirrors _fmtCtx().
+  // All practical ctx lengths (512 … 1M) are powers of 2, so dividing by 1024 is exact.
+  if (n >= 1048576) return "1M tokens";
+  if (n >= 524288)  return "512K tokens";
+  if (n >= 262144)  return "256K tokens";
+  if (n >= 131072)  return "128K tokens";
+  if (n >= 65536)   return "64K tokens";
+  if (n >= 32768)   return "32K tokens";
+  if (n >= 16384)   return "16K tokens";
+  if (n >= 8192)    return "8K tokens";
+  if (n >= 4096)    return "4K tokens";
+  if (n >= 2048)    return "2K tokens";
+  if (n >= 1024)    return "1K tokens";
   return n + " tokens";
 }
 
