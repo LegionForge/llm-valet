@@ -254,7 +254,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def acknowledge_setup(request: Request) -> Any:
         # Localhost-only — prevents a LAN client from prematurely dismissing the modal.
         if not _is_local(request):
-            raise HTTPException(  # noqa: E501
+            raise HTTPException(
                 status_code=403, detail="Setup acknowledgment requires local access"
             )
         settings.acknowledge_key()
