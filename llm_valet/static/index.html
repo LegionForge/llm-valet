@@ -406,46 +406,64 @@
     margin-bottom: 16px;
     line-height: 1.6;
   }
+  /* Clickable key display — entire box acts as copy trigger */
   #setup-key-box {
     display: flex;
     align-items: center;
     gap: 8px;
     background: var(--bg);
-    border: 1px solid var(--border);
+    border: 1px solid var(--accent);
     border-radius: 3px;
-    padding: 8px 10px;
-    margin-bottom: 16px;
+    padding: 10px 12px;
+    margin-bottom: 6px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
   }
+  #setup-key-box:hover { border-color: var(--text); background: #111; }
+  :root[data-theme="light"] #setup-key-box:hover { background: #e8e8e8; }
   #setup-key-display {
     flex: 1;
     font-family: inherit;
     font-size: 12px;
-    color: var(--text);
+    color: var(--accent);
     word-break: break-all;
     user-select: all;
+    letter-spacing: 0.02em;
   }
-  #setup-copy-btn {
-    flex-shrink: 0;
-    padding: 4px 12px;
-    font-size: 11px;
-  }
-  #setup-copy-confirm {
+  #setup-key-icon { color: var(--dim); font-size: 14px; flex-shrink: 0; }
+  #setup-key-hint {
     font-size: 10px;
+    color: var(--dim);
+    margin-bottom: 20px;
+  }
+  .setup-btn-primary {
+    width: 100%;
+    padding: 11px;
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    border-color: var(--accent);
+    color: var(--accent);
+    margin-bottom: 0;
+  }
+  .setup-btn-primary:hover { border-color: var(--text); color: var(--text); }
+  /* State 2 — confirmation */
+  #setup-state-2 { display: none; }
+  #setup-state-2.active { display: block; }
+  #setup-state-1.hidden { display: none; }
+  #setup-confirmed-msg {
+    font-size: 12px;
     color: var(--green);
-    min-height: 14px;
-    margin-bottom: 14px;
+    border: 1px solid var(--green);
+    border-radius: 3px;
+    padding: 10px 12px;
+    margin-bottom: 20px;
+    line-height: 1.6;
   }
   #setup-hint {
     font-size: 11px;
     color: var(--dim);
     margin-bottom: 20px;
     line-height: 1.5;
-  }
-  #setup-confirm-btn {
-    width: 100%;
-    padding: 9px;
-    font-size: 12px;
-    letter-spacing: 0.08em;
   }
 </style>
 </head>
@@ -455,21 +473,37 @@
 <div id="setup-modal" role="dialog" aria-modal="true" aria-labelledby="setup-modal-title">
   <div id="setup-overlay"></div>
   <div id="setup-card">
-    <h2 id="setup-modal-title">Save your API key</h2>
-    <div id="setup-warning">
-      This is the only time this key will be shown.<br>
-      Copy it and store it somewhere safe before continuing.
+
+    <!-- State 1: show key + copy CTA -->
+    <div id="setup-state-1">
+      <h2 id="setup-modal-title">Save your API key</h2>
+      <div id="setup-warning">
+        This is the only time this key will be shown.<br>
+        Store it somewhere safe before continuing.
+      </div>
+      <div id="setup-key-box" title="Copy key to clipboard" onclick="copySetupKey()" role="button" tabindex="0" aria-label="Copy API key to clipboard">
+        <span id="setup-key-display"></span>
+        <span id="setup-key-icon">⧉</span>
+      </div>
+      <div id="setup-key-hint">Click the key to copy it to your clipboard</div>
+      <p id="setup-hint">
+        Required for LAN access when <code>host: 0.0.0.0</code> is set in config.yaml.<br>
+        You can always retrieve it from <code>~/.llm-valet/config.yaml</code>.
+      </p>
+      <button class="setup-btn-primary" onclick="copySetupKey()">Copy Key to Clipboard</button>
     </div>
-    <div id="setup-key-box">
-      <span id="setup-key-display"></span>
-      <button class="icon-btn" id="setup-copy-btn" title="Copy key to clipboard" onclick="copySetupKey()">⧉</button>
+
+    <!-- State 2: confirmation before dismiss -->
+    <div id="setup-state-2">
+      <h2>Key copied</h2>
+      <div id="setup-confirmed-msg">
+        Make sure your key is stored somewhere safe —<br>
+        a password manager, notes app, or config file.<br><br>
+        You will not be shown this key again.
+      </div>
+      <button class="setup-btn-primary" onclick="acknowledgeSetupKey()">I've stored my key — continue</button>
     </div>
-    <div id="setup-copy-confirm"></div>
-    <p id="setup-hint">
-      Required for LAN access when <code>host: 0.0.0.0</code> is set in config.yaml.<br>
-      You can always retrieve it from <code>~/.llm-valet/config.yaml</code>.
-    </p>
-    <button id="setup-confirm-btn" onclick="acknowledgeSetupKey()">I've saved my key — continue</button>
+
   </div>
 </div>
 
@@ -1595,30 +1629,46 @@ async function checkSetup() {
   } catch (_) { /* non-fatal — dashboard boots regardless */ }
 }
 
+// Keyboard activation for the clickable key box
+document.addEventListener("keydown", function(e) {
+  const box = document.getElementById("setup-key-box");
+  if (box && document.activeElement === box && (e.key === "Enter" || e.key === " ")) {
+    e.preventDefault();
+    copySetupKey();
+  }
+});
+
 function copySetupKey() {
   if (!_setupKey) return;
   navigator.clipboard.writeText(_setupKey).then(function() {
-    const el = document.getElementById("setup-copy-confirm");
-    el.textContent = "Copied to clipboard";
-    setTimeout(function() { el.textContent = ""; }, 2500);
+    _showSetupState2();
   }).catch(function() {
-    const el = document.getElementById("setup-copy-confirm");
-    el.textContent = "Select the key above and copy manually";
+    // Clipboard blocked — select the text so user can copy manually, stay on state 1
+    const el = document.getElementById("setup-key-display");
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const sel = window.getSelection();
+    if (sel) { sel.removeAllRanges(); sel.addRange(range); }
   });
 }
 
+function _showSetupState2() {
+  document.getElementById("setup-state-1").classList.add("hidden");
+  document.getElementById("setup-state-2").classList.add("active");
+}
+
 async function acknowledgeSetupKey() {
-  const btn = document.getElementById("setup-confirm-btn");
-  btn.disabled = true;
+  const btns = document.querySelectorAll("#setup-state-2 .setup-btn-primary");
+  btns.forEach(function(b) { b.disabled = true; });
   try {
     const r = await fetch("/setup/acknowledge", { method: "POST" });
-    if (!r.ok) { btn.disabled = false; return; }
+    if (!r.ok) { btns.forEach(function(b) { b.disabled = false; }); return; }
     // Store key in session so dashboard API calls work immediately after modal closes.
     if (_setupKey) setKey(_setupKey);
     document.getElementById("setup-modal").classList.remove("open");
     _setupKey = "";
   } catch (_) {
-    btn.disabled = false;
+    btns.forEach(function(b) { b.disabled = false; });
   }
 }
 
