@@ -173,6 +173,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # T2 — DNS rebinding: reject any Host header not in the allowlist.
     # Without this a malicious page can rebind DNS to 127.0.0.1 and reach the API.
     allowed_hosts = ["localhost", "127.0.0.1", "*.local", *settings.extra_allowed_hosts]
+    # SECURITY EXCEPTION: S104 — intentional 0.0.0.0 string comparison (not a bind call).
+    # Mitigations: (1) X-API-Key required for all non-localhost requests; (2) TrustedHostMiddleware
+    # blocks DNS rebinding; (3) user must opt in via config (default is 127.0.0.1).
+    # Reviewed: JP Cruz (jp@legionforge.org), 2026-04-16
     if settings.host == "0.0.0.0":  # noqa: S104
         # Raw IP addresses in the Host header are not a DNS rebinding vector —
         # rebinding requires a domain name. Auto-allow local interface IPs so the
@@ -270,6 +274,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         port = int(body.get("port", 8765))
 
         # Validate host — must be a known safe value or a valid IP
+        # SECURITY EXCEPTION: S104 — string comparison against "0.0.0.0", not a bind call.
+        # This is input validation: rejecting unknown values, not opening a socket.
+        # Reviewed: JP Cruz (jp@legionforge.org), 2026-04-16
         if host not in ("127.0.0.1", "0.0.0.0"):  # noqa: S104
             try:
                 ipaddress.ip_address(host)
@@ -281,7 +288,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         settings.apply_network_config(host, port)
 
-        # Browser redirect target — 0.0.0.0 binds all interfaces but browsers need a real host
+        # Browser redirect target — 0.0.0.0 binds all interfaces but browsers need a real host.
+        # SECURITY EXCEPTION: S104 — string comparison only; no socket is opened here.
+        # Reviewed: JP Cruz (jp@legionforge.org), 2026-04-16
         display_host = "localhost" if host in ("127.0.0.1", "0.0.0.0") else host  # noqa: S104
         redirect_url = f"http://{display_host}:{port}/"
 
