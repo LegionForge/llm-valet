@@ -177,7 +177,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Mitigations: (1) X-API-Key required for all non-localhost requests; (2) TrustedHostMiddleware
     # blocks DNS rebinding; (3) user must opt in via config (default is 127.0.0.1).
     # Reviewed: JP Cruz (jp@legionforge.org), 2026-04-16
-    if settings.host == "0.0.0.0":  # noqa: S104
+    if settings.host == "0.0.0.0":  # noqa: S104  # nosec B104
         # Raw IP addresses in the Host header are not a DNS rebinding vector —
         # rebinding requires a domain name. Auto-allow local interface IPs so the
         # WebUI is reachable by IP immediately after LAN install without manual config.
@@ -277,7 +277,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # SECURITY EXCEPTION: S104 — string comparison against "0.0.0.0", not a bind call.
         # This is input validation: rejecting unknown values, not opening a socket.
         # Reviewed: JP Cruz (jp@legionforge.org), 2026-04-16
-        if host not in ("127.0.0.1", "0.0.0.0"):  # noqa: S104
+        if host not in ("127.0.0.1", "0.0.0.0"):  # noqa: S104  # nosec B104
             try:
                 ipaddress.ip_address(host)
             except ValueError as exc:
@@ -291,7 +291,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # Browser redirect target — 0.0.0.0 binds all interfaces but browsers need a real host.
         # SECURITY EXCEPTION: S104 — string comparison only; no socket is opened here.
         # Reviewed: JP Cruz (jp@legionforge.org), 2026-04-16
-        display_host = "localhost" if host in ("127.0.0.1", "0.0.0.0") else host  # noqa: S104
+        display_host = "localhost" if host in ("127.0.0.1", "0.0.0.0") else host  # noqa: S104  # nosec B104
         redirect_url = f"http://{display_host}:{port}/"
 
         # Trigger graceful restart via call_later so the HTTP response returns first.
