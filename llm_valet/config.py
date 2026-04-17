@@ -56,6 +56,7 @@ class Settings:
     model_name: str | None = None
     # Auth
     api_key: str = ""
+    key_acknowledged: bool = False
     # CORS / trusted hosts
     cors_origins: list[str] = field(default_factory=list)
     extra_allowed_hosts: list[str] = field(default_factory=list)
@@ -63,6 +64,10 @@ class Settings:
     thresholds: ResourceThresholds = field(default_factory=ResourceThresholds)
     # Logging
     log_file: str = "~/.llm-valet/valet.log"
+
+    def acknowledge_key(self) -> None:
+        self.key_acknowledged = True
+        _save_settings(self)
 
     def update_thresholds(self, data: dict[str, Any]) -> dict[str, Any]:
         """Apply a partial threshold update and persist to disk."""
@@ -95,7 +100,7 @@ def load_settings() -> Settings:
 
 
 def _apply_yaml(settings: Settings, raw: dict[str, Any]) -> None:
-    for key in ("host", "port", "provider", "model_name", "api_key", "log_file"):
+    for key in ("host", "port", "provider", "model_name", "api_key", "key_acknowledged", "log_file"):
         if key in raw:
             setattr(settings, key, raw[key])
 
@@ -142,6 +147,7 @@ def _save_settings(settings: Settings) -> None:
         "ollama_url": settings.ollama_url,
         "model_name": settings.model_name,
         "api_key": settings.api_key,
+        "key_acknowledged": settings.key_acknowledged,
         "cors_origins": settings.cors_origins,
         "extra_allowed_hosts": settings.extra_allowed_hosts,
         "log_file": settings.log_file,

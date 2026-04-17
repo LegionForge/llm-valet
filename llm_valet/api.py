@@ -2,6 +2,7 @@ import asyncio
 import logging
 import logging.handlers
 import os
+import socket
 import sys
 import time
 from collections.abc import AsyncGenerator
@@ -171,6 +172,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # T2 — DNS rebinding: reject any Host header not in the allowlist.
     # Without this a malicious page can rebind DNS to 127.0.0.1 and reach the API.
     allowed_hosts = ["localhost", "127.0.0.1", "*.local", *settings.extra_allowed_hosts]
+    if settings.host == "0.0.0.0":
+        # Raw IP addresses in the Host header are not a DNS rebinding vector —
+        # rebinding requires a domain name. Auto-allow local interface IPs so the
+        # WebUI is reachable by IP immediately after LAN install without manual config.
+        import psutil
+
+        for addrs in psutil.net_if_addrs().values():
+            for addr in addrs:
+                if addr.family == socket.AF_INET and not addr.address.startswith("127."):
+                    allowed_hosts.append(addr.address)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts)
 
     # T3 — CORS wildcard prevention: allow_origins is config-only, never "*".
@@ -226,6 +237,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if index_file.is_file():
             return FileResponse(index_file)
         return {"service": "llm-valet", "docs": "/docs"}
+
+    def _is_local(request: Request) -> bool:
+        return bool(request.client) and request.client.host in ("127.0.0.1", "::1")
+
+    @app.get("/setup", include_in_schema=False)
+    async def setup_status(request: Request) -> Any:
+        # Only expose the key to localhost — LAN clients learn only whether setup is needed.
+        # Once acknowledged the key is never returned again regardless of origin.
+        if not settings.key_acknowledged and _is_local(request):
+            return {"needs_setup": True, "api_key": settings.api_key}
+        return {"needs_setup": not settings.key_acknowledged, "api_key": None}
+
+    @app.post("/setup/acknowledge", include_in_schema=False)
+    async def acknowledge_setup(request: Request) -> Any:
+        # Localhost-only — prevents a LAN client from prematurely dismissing the modal.
+        if not _is_local(request):
+            raise HTTPException(status_code=403, detail="Setup acknowledgment requires local access")
+        settings.acknowledge_key()
+        return {"ok": True}
 
     @app.get("/status")
     async def get_status(

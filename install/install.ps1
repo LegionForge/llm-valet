@@ -14,8 +14,10 @@ $ErrorActionPreference = "Stop"
 $InstallDir = Join-Path $env:USERPROFILE ".llm-valet"
 $VenvDir    = Join-Path $InstallDir ".venv"
 $ConfigFile = Join-Path $InstallDir "config.yaml"
-$TaskName   = "llm-valet"
-$Steps      = 5
+$TaskName      = "llm-valet"
+$Steps         = 5
+$FreshInstall  = $false
+$ApiKey        = ""
 
 function Write-Step { param([int]$n, [string]$msg) Write-Host "`n[$n/$Steps] $msg" -ForegroundColor White }
 function Write-Ok   { param([string]$msg) Write-Host "  [OK] $msg" -ForegroundColor Green  }
@@ -100,7 +102,11 @@ Write-Step 4 "Writing configuration..."
 if (Test-Path $ConfigFile) {
     Write-Ok "Config already exists — keeping your existing settings"
 } else {
-    @'
+    $FreshInstall = $true
+    $bytes  = [System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32)
+    $ApiKey = [System.BitConverter]::ToString($bytes).Replace("-","").ToLower()
+
+    @"
 # llm-valet configuration
 # Full reference: https://github.com/LegionForge/llm-valet
 
@@ -109,7 +115,7 @@ port: 8765
 provider: ollama
 ollama_url: http://127.0.0.1:11434
 model_name:       # leave blank to auto-detect loaded model
-api_key:          # required when host is not 127.0.0.1
+api_key: $ApiKey
 
 thresholds:
   ram_pause_pct: 85.0
@@ -119,7 +125,7 @@ thresholds:
   gpu_vram_pause_pct: 85.0
   pause_timeout_seconds: 120
   check_interval_seconds: 10
-'@ | Set-Content -Path $ConfigFile -Encoding UTF8
+"@ | Set-Content -Path $ConfigFile -Encoding UTF8
 
     # Restrict config file to current user (mirrors chmod 600)
     icacls $ConfigFile /inheritance:r /grant:r "${env:USERNAME}:F" 2>&1 | Out-Null
@@ -178,6 +184,11 @@ Write-Host "  WebUI:    http://localhost:8765"
 Write-Host "  API docs: http://localhost:8765/docs"
 Write-Host "  Config:   $ConfigFile"
 Write-Host ""
+if ($FreshInstall) {
+    Write-Host "  API key (save this): $ApiKey" -ForegroundColor Yellow
+    Write-Host "  Required for LAN access (when host: 0.0.0.0 in config)."
+    Write-Host ""
+}
 Write-Host "  Start manually:   $ValetBin"
 Write-Host "  Pause:            curl -X POST http://localhost:8765/pause"
 Write-Host "  Resume:           curl -X POST http://localhost:8765/resume"

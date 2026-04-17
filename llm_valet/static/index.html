@@ -365,9 +365,113 @@
 
   /* ── Separator ───────────────────────────────────────────────────────────── */
   .load-status { font-size: 11px; color: var(--dim); margin-top: 6px; min-height: 15px; }
+
+  /* ── First-run key modal ─────────────────────────────────────────────────── */
+  #setup-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+  }
+  #setup-modal.open { display: flex; }
+  #setup-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.8);
+  }
+  #setup-card {
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 28px 24px 24px;
+    max-width: 500px;
+    width: 92%;
+    z-index: 1;
+  }
+  #setup-card h2 {
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 10px;
+    letter-spacing: 0.04em;
+  }
+  #setup-warning {
+    font-size: 11px;
+    color: var(--yellow);
+    border: 1px solid var(--yellow);
+    border-radius: 3px;
+    padding: 7px 10px;
+    margin-bottom: 16px;
+    line-height: 1.6;
+  }
+  #setup-key-box {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 8px 10px;
+    margin-bottom: 16px;
+  }
+  #setup-key-display {
+    flex: 1;
+    font-family: inherit;
+    font-size: 12px;
+    color: var(--text);
+    word-break: break-all;
+    user-select: all;
+  }
+  #setup-copy-btn {
+    flex-shrink: 0;
+    padding: 4px 12px;
+    font-size: 11px;
+  }
+  #setup-copy-confirm {
+    font-size: 10px;
+    color: var(--green);
+    min-height: 14px;
+    margin-bottom: 14px;
+  }
+  #setup-hint {
+    font-size: 11px;
+    color: var(--dim);
+    margin-bottom: 20px;
+    line-height: 1.5;
+  }
+  #setup-confirm-btn {
+    width: 100%;
+    padding: 9px;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+  }
 </style>
 </head>
 <body>
+
+<!-- First-run key modal (shown once after install — never displayed again after acknowledgment) -->
+<div id="setup-modal" role="dialog" aria-modal="true" aria-labelledby="setup-modal-title">
+  <div id="setup-overlay"></div>
+  <div id="setup-card">
+    <h2 id="setup-modal-title">Save your API key</h2>
+    <div id="setup-warning">
+      This is the only time this key will be shown.<br>
+      Copy it and store it somewhere safe before continuing.
+    </div>
+    <div id="setup-key-box">
+      <span id="setup-key-display"></span>
+      <button class="icon-btn" id="setup-copy-btn" title="Copy key to clipboard" onclick="copySetupKey()">⧉</button>
+    </div>
+    <div id="setup-copy-confirm"></div>
+    <p id="setup-hint">
+      Required for LAN access when <code>host: 0.0.0.0</code> is set in config.yaml.<br>
+      You can always retrieve it from <code>~/.llm-valet/config.yaml</code>.
+    </p>
+    <button id="setup-confirm-btn" onclick="acknowledgeSetupKey()">I've saved my key — continue</button>
+  </div>
+</div>
 
 <!-- Header -->
 <div class="header-row">
@@ -1474,9 +1578,54 @@ function hideError() {
   document.getElementById("error-banner").style.display = "none";
 }
 
+// ── First-run setup modal ─────────────────────────────────────────────────────
+
+let _setupKey = "";
+
+async function checkSetup() {
+  try {
+    const r = await fetch("/setup");
+    if (!r.ok) return;
+    const data = await r.json();
+    if (data.needs_setup && data.api_key) {
+      _setupKey = data.api_key;
+      document.getElementById("setup-key-display").textContent = _setupKey;
+      document.getElementById("setup-modal").classList.add("open");
+    }
+  } catch (_) { /* non-fatal — dashboard boots regardless */ }
+}
+
+function copySetupKey() {
+  if (!_setupKey) return;
+  navigator.clipboard.writeText(_setupKey).then(function() {
+    const el = document.getElementById("setup-copy-confirm");
+    el.textContent = "Copied to clipboard";
+    setTimeout(function() { el.textContent = ""; }, 2500);
+  }).catch(function() {
+    const el = document.getElementById("setup-copy-confirm");
+    el.textContent = "Select the key above and copy manually";
+  });
+}
+
+async function acknowledgeSetupKey() {
+  const btn = document.getElementById("setup-confirm-btn");
+  btn.disabled = true;
+  try {
+    const r = await fetch("/setup/acknowledge", { method: "POST" });
+    if (!r.ok) { btn.disabled = false; return; }
+    // Store key in session so dashboard API calls work immediately after modal closes.
+    if (_setupKey) setKey(_setupKey);
+    document.getElementById("setup-modal").classList.remove("open");
+    _setupKey = "";
+  } catch (_) {
+    btn.disabled = false;
+  }
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 initTheme();
+checkSetup();   // runs in parallel with boot — modal overlays dashboard if needed
 boot();
 </script>
 </body>

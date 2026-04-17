@@ -10,6 +10,8 @@ PACKAGE="llm-valet"
 MIN_PYTHON_MAJOR=3
 MIN_PYTHON_MINOR=11
 STEPS=5
+FRESH_INSTALL=false
+API_KEY=""
 
 # ── Colours ───────────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BOLD='\033[1m'; NC='\033[0m'
@@ -106,6 +108,12 @@ step 4 "Writing configuration..."
 if [[ -f "$CONFIG_FILE" ]]; then
   ok "Config already exists — keeping your existing settings"
 else
+  FRESH_INSTALL=true
+  if command -v openssl &>/dev/null; then
+    API_KEY=$(openssl rand -hex 32)
+  else
+    API_KEY=$("$PYTHON" -c "import secrets; print(secrets.token_hex(32))")
+  fi
   cat > "$CONFIG_FILE" <<'EOF'
 # llm-valet configuration
 # Full reference: https://github.com/LegionForge/llm-valet
@@ -115,7 +123,7 @@ port: 8765
 provider: ollama
 ollama_url: http://127.0.0.1:11434
 model_name:       # leave blank to auto-detect loaded model
-api_key:          # required when host is not 127.0.0.1
+api_key: GENERATED_KEY_PLACEHOLDER
 
 thresholds:
   ram_pause_pct: 85.0
@@ -126,6 +134,7 @@ thresholds:
   pause_timeout_seconds: 120
   check_interval_seconds: 10
 EOF
+  sed -i "s/GENERATED_KEY_PLACEHOLDER/$API_KEY/" "$CONFIG_FILE"
   chmod 600 "$CONFIG_FILE"
   ok "Default config written to $CONFIG_FILE"
 fi
@@ -212,6 +221,11 @@ echo "  WebUI:    http://localhost:8765"
 echo "  API docs: http://localhost:8765/docs"
 echo "  Config:   $CONFIG_FILE"
 echo ""
+if [[ "$FRESH_INSTALL" == "true" ]]; then
+  echo -e "  ${YELLOW}${BOLD}API key (save this):${NC} $API_KEY"
+  echo "  Required for LAN access (when host: 0.0.0.0 in config)."
+  echo ""
+fi
 echo "  Start manually:   $VALET_BIN"
 echo "  Pause:            curl -X POST http://localhost:8765/pause"
 echo "  Resume:           curl -X POST http://localhost:8765/resume"
