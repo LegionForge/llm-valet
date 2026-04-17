@@ -114,7 +114,7 @@ else
   else
     API_KEY=$("$PYTHON" -c "import secrets; print(secrets.token_hex(32))")
   fi
-  cat > "$CONFIG_FILE" <<'EOF'
+  cat > "$CONFIG_FILE" <<EOF
 # llm-valet configuration
 # Full reference: https://github.com/LegionForge/llm-valet
 
@@ -123,7 +123,7 @@ port: 8765
 provider: ollama
 ollama_url: http://127.0.0.1:11434
 model_name:       # leave blank to auto-detect loaded model
-api_key: GENERATED_KEY_PLACEHOLDER
+api_key: $API_KEY
 
 thresholds:
   ram_pause_pct: 85.0
@@ -134,7 +134,6 @@ thresholds:
   pause_timeout_seconds: 120
   check_interval_seconds: 10
 EOF
-  sed -i "s/GENERATED_KEY_PLACEHOLDER/$API_KEY/" "$CONFIG_FILE"
   chmod 600 "$CONFIG_FILE"
   ok "Default config written to $CONFIG_FILE"
 fi
