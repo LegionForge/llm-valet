@@ -1,4 +1,5 @@
 import asyncio
+import ipaddress
 import logging
 import logging.handlers
 import os
@@ -256,6 +257,38 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=403, detail="Setup acknowledgment requires local access")
         settings.acknowledge_key()
         return {"ok": True}
+
+    @app.post("/setup/apply", include_in_schema=False)
+    async def apply_setup(request: Request) -> Any:
+        # Localhost-only — network config changes require physical/local access.
+        if not _is_local(request):
+            raise HTTPException(status_code=403, detail="Setup requires local access")
+        body = await request.json()
+        host = str(body.get("host", "127.0.0.1")).strip()
+        port = int(body.get("port", 8765))
+
+        # Validate host — must be a known safe value or a valid IP
+        if host not in ("127.0.0.1", "0.0.0.0"):
+            try:
+                ipaddress.ip_address(host)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid host address")
+
+        if not (1024 <= port <= 65535):
+            raise HTTPException(status_code=400, detail="Port must be between 1024 and 65535")
+
+        settings.apply_network_config(host, port)
+
+        # Browser redirect target — 0.0.0.0 binds all interfaces but browsers need a real host
+        display_host = "localhost" if host in ("127.0.0.1", "0.0.0.0") else host
+        redirect_url = f"http://{display_host}:{port}/"
+
+        # Trigger graceful restart via call_later so the HTTP response returns first.
+        # launchd (macOS) and systemd (Linux) KeepAlive/Restart will respawn the process.
+        loop = asyncio.get_event_loop()
+        loop.call_later(1.0, lambda: os._exit(0))
+
+        return {"ok": True, "redirect_url": redirect_url}
 
     @app.get("/status")
     async def get_status(

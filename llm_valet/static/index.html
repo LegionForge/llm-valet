@@ -465,16 +465,130 @@
     margin-bottom: 20px;
     line-height: 1.5;
   }
+  /* State 2 — network config */
+  #setup-state-2 .setup-section-label {
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--dim);
+    margin-bottom: 10px;
+  }
+  .setup-radio-group { margin-bottom: 18px; }
+  .setup-radio-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 9px 12px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    margin-bottom: 6px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .setup-radio-row:hover { border-color: var(--accent); }
+  .setup-radio-row.selected { border-color: var(--accent); }
+  .setup-radio-row input[type=radio] {
+    margin-top: 2px;
+    accent-color: var(--accent);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .setup-radio-label { font-size: 12px; color: var(--text); }
+  .setup-radio-desc { font-size: 10px; color: var(--dim); margin-top: 2px; }
+  #setup-custom-host-row {
+    display: none;
+    margin-top: -2px;
+    margin-bottom: 6px;
+  }
+  #setup-custom-host-row.visible { display: block; }
+  #setup-custom-host-input {
+    width: 100%;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 7px 10px;
+    border-radius: 3px;
+    font-family: inherit;
+    font-size: 12px;
+  }
+  #setup-custom-host-input:focus { outline: none; border-color: var(--accent); }
+  .setup-port-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .setup-port-row label {
+    font-size: 11px;
+    color: var(--dim);
+    white-space: nowrap;
+  }
+  #setup-port-input {
+    width: 90px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 6px 10px;
+    border-radius: 3px;
+    font-family: inherit;
+    font-size: 12px;
+    text-align: right;
+  }
+  #setup-port-input:focus { outline: none; border-color: var(--accent); }
+  #setup-net-error {
+    font-size: 11px;
+    color: var(--red);
+    min-height: 14px;
+    margin-bottom: 10px;
+  }
+  /* State 3 — confirm */
+  .setup-summary-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .setup-summary-row:last-of-type { border-bottom: none; }
+  .setup-summary-label { color: var(--dim); }
+  .setup-summary-value { color: var(--text); }
+  .setup-summary-block { margin-bottom: 16px; }
+  #setup-key-final-label {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--yellow);
+    margin-bottom: 6px;
+  }
+  #setup-key-final-box {
+    background: var(--bg);
+    border: 1px solid var(--yellow);
+    border-radius: 3px;
+    padding: 8px 10px;
+    font-size: 11px;
+    color: var(--yellow);
+    word-break: break-all;
+    user-select: all;
+    margin-bottom: 20px;
+    opacity: 0.8;
+  }
+  #setup-restart-status {
+    font-size: 11px;
+    color: var(--dim);
+    text-align: center;
+    margin-top: 10px;
+    min-height: 16px;
+  }
 </style>
 </head>
 <body>
 
-<!-- First-run key modal (shown once after install — never displayed again after acknowledgment) -->
+<!-- First-run setup modal (shown once after install) -->
 <div id="setup-modal" role="dialog" aria-modal="true" aria-labelledby="setup-modal-title">
   <div id="setup-overlay"></div>
   <div id="setup-card">
 
-    <!-- State 1: show key + copy CTA -->
+    <!-- State 1: copy API key -->
     <div id="setup-state-1">
       <h2 id="setup-modal-title">Save your API key</h2>
       <div id="setup-warning">
@@ -487,21 +601,70 @@
       </div>
       <div id="setup-key-hint">Click the key to copy it to your clipboard</div>
       <p id="setup-hint">
-        Required for LAN access when <code>host: 0.0.0.0</code> is set in config.yaml.<br>
-        You can always retrieve it from <code>~/.llm-valet/config.yaml</code>.
+        Required for LAN access. You can always retrieve it from <code>~/.llm-valet/config.yaml</code>.
       </p>
       <button class="setup-btn-primary" onclick="copySetupKey()">Copy Key to Clipboard</button>
     </div>
 
-    <!-- State 2: confirmation before dismiss -->
+    <!-- State 2: network config -->
     <div id="setup-state-2">
-      <h2>Key copied</h2>
-      <div id="setup-confirmed-msg">
-        Make sure your key is stored somewhere safe —<br>
-        a password manager, notes app, or config file.<br><br>
-        You will not be shown this key again.
+      <h2>Network access</h2>
+      <p style="font-size:11px;color:var(--dim);margin-bottom:14px;line-height:1.6">
+        Choose how other devices can reach llm-valet.
+      </p>
+      <div class="setup-section-label">Who can connect?</div>
+      <div class="setup-radio-group">
+        <label class="setup-radio-row selected" id="setup-radio-row-local" onclick="selectHost('127.0.0.1')">
+          <input type="radio" name="setup-host" value="127.0.0.1" checked>
+          <div>
+            <div class="setup-radio-label">This machine only</div>
+            <div class="setup-radio-desc">127.0.0.1 — safest; only the Mac Mini can reach it</div>
+          </div>
+        </label>
+        <label class="setup-radio-row" id="setup-radio-row-lan" onclick="selectHost('0.0.0.0')">
+          <input type="radio" name="setup-host" value="0.0.0.0">
+          <div>
+            <div class="setup-radio-label">Local network</div>
+            <div class="setup-radio-desc">0.0.0.0 — LAN devices can connect using your API key</div>
+          </div>
+        </label>
+        <label class="setup-radio-row" id="setup-radio-row-custom" onclick="selectHost('custom')">
+          <input type="radio" name="setup-host" value="custom">
+          <div>
+            <div class="setup-radio-label">Custom IP</div>
+            <div class="setup-radio-desc">Bind to a specific network interface</div>
+          </div>
+        </label>
       </div>
-      <button class="setup-btn-primary" onclick="acknowledgeSetupKey()">I've stored my key — continue</button>
+      <div id="setup-custom-host-row">
+        <input type="text" id="setup-custom-host-input" placeholder="e.g. 192.168.1.50" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="setup-port-row">
+        <label for="setup-port-input">Port</label>
+        <input type="number" id="setup-port-input" value="8765" min="1024" max="65535">
+        <span style="font-size:11px;color:var(--dim)">default: 8765</span>
+      </div>
+      <div id="setup-net-error"></div>
+      <button class="setup-btn-primary" onclick="setupNetNext()">Next</button>
+    </div>
+
+    <!-- State 3: confirm + key one last time -->
+    <div id="setup-state-3">
+      <h2>Confirm &amp; apply</h2>
+      <div class="setup-summary-block">
+        <div class="setup-summary-row">
+          <span class="setup-summary-label">Access</span>
+          <span class="setup-summary-value" id="setup-summary-host"></span>
+        </div>
+        <div class="setup-summary-row">
+          <span class="setup-summary-label">Port</span>
+          <span class="setup-summary-value" id="setup-summary-port"></span>
+        </div>
+      </div>
+      <div id="setup-key-final-label">API key — last time shown</div>
+      <div id="setup-key-final-box"></div>
+      <button class="setup-btn-primary" id="setup-apply-btn" onclick="applySetup()">Save &amp; Restart</button>
+      <div id="setup-restart-status"></div>
     </div>
 
   </div>
@@ -1615,6 +1778,8 @@ function hideError() {
 // ── First-run setup modal ─────────────────────────────────────────────────────
 
 let _setupKey = "";
+let _setupHost = "127.0.0.1";
+let _setupPort = 8765;
 
 async function checkSetup() {
   try {
@@ -1624,6 +1789,7 @@ async function checkSetup() {
     if (data.needs_setup && data.api_key) {
       _setupKey = data.api_key;
       document.getElementById("setup-key-display").textContent = _setupKey;
+      _showSetupState(1);
       document.getElementById("setup-modal").classList.add("open");
     }
   } catch (_) { /* non-fatal — dashboard boots regardless */ }
@@ -1641,9 +1807,9 @@ document.addEventListener("keydown", function(e) {
 function copySetupKey() {
   if (!_setupKey) return;
   navigator.clipboard.writeText(_setupKey).then(function() {
-    _showSetupState2();
+    _showSetupState(2);
   }).catch(function() {
-    // Clipboard blocked — select the text so user can copy manually, stay on state 1
+    // Clipboard blocked — select text so user can copy manually, stay on state 1
     const el = document.getElementById("setup-key-display");
     const range = document.createRange();
     range.selectNodeContents(el);
@@ -1652,23 +1818,93 @@ function copySetupKey() {
   });
 }
 
-function _showSetupState2() {
-  document.getElementById("setup-state-1").classList.add("hidden");
-  document.getElementById("setup-state-2").classList.add("active");
+function _showSetupState(n) {
+  [1, 2, 3].forEach(function(i) {
+    const el = document.getElementById("setup-state-" + i);
+    if (!el) return;
+    el.style.display = (i === n) ? "block" : "none";
+  });
 }
 
-async function acknowledgeSetupKey() {
-  const btns = document.querySelectorAll("#setup-state-2 .setup-btn-primary");
-  btns.forEach(function(b) { b.disabled = true; });
+function selectHost(value) {
+  _setupHost = value === "custom" ? "" : value;
+  ["local", "lan", "custom"].forEach(function(id) {
+    const row = document.getElementById("setup-radio-row-" + id);
+    if (row) row.classList.remove("selected");
+  });
+  const idMap = {"127.0.0.1": "local", "0.0.0.0": "lan", "custom": "custom"};
+  const row = document.getElementById("setup-radio-row-" + (idMap[value] || "custom"));
+  if (row) row.classList.add("selected");
+  const customRow = document.getElementById("setup-custom-host-row");
+  if (customRow) customRow.className = "setup-custom-host-row" + (value === "custom" ? " visible" : "");
+}
+
+function setupNetNext() {
+  const portEl = document.getElementById("setup-port-input");
+  const errEl  = document.getElementById("setup-net-error");
+  errEl.textContent = "";
+  _setupPort = parseInt(portEl.value, 10);
+
+  // Resolve host value
+  const radios = document.querySelectorAll("input[name='setup-host']");
+  let hostVal = "127.0.0.1";
+  radios.forEach(function(r) { if (r.checked) hostVal = r.value; });
+  if (hostVal === "custom") {
+    hostVal = (document.getElementById("setup-custom-host-input").value || "").trim();
+    if (!hostVal) { errEl.textContent = "Enter a custom IP address."; return; }
+  }
+  _setupHost = hostVal;
+
+  if (isNaN(_setupPort) || _setupPort < 1024 || _setupPort > 65535) {
+    errEl.textContent = "Port must be between 1024 and 65535.";
+    return;
+  }
+
+  // Populate state 3 summary
+  const hostLabels = {"127.0.0.1": "This machine only (127.0.0.1)", "0.0.0.0": "Local network (0.0.0.0)"};
+  document.getElementById("setup-summary-host").textContent = hostLabels[_setupHost] || _setupHost;
+  document.getElementById("setup-summary-port").textContent = String(_setupPort);
+  document.getElementById("setup-key-final-box").textContent = _setupKey;
+  _showSetupState(3);
+}
+
+async function applySetup() {
+  const btn    = document.getElementById("setup-apply-btn");
+  const status = document.getElementById("setup-restart-status");
+  btn.disabled = true;
+  status.textContent = "Saving and restarting…";
   try {
-    const r = await fetch("/setup/acknowledge", { method: "POST" });
-    if (!r.ok) { btns.forEach(function(b) { b.disabled = false; }); return; }
-    // Store key in session so dashboard API calls work immediately after modal closes.
+    const r = await fetch("/setup/apply", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({host: _setupHost, port: _setupPort}),
+    });
+    if (!r.ok) {
+      const d = await r.json().catch(function() { return {}; });
+      status.textContent = "Error: " + (d.detail || r.status);
+      btn.disabled = false;
+      return;
+    }
+    const data = await r.json();
     if (_setupKey) setKey(_setupKey);
-    document.getElementById("setup-modal").classList.remove("open");
     _setupKey = "";
-  } catch (_) {
-    btns.forEach(function(b) { b.disabled = false; });
+
+    // Count down then redirect to the new URL
+    let secs = 4;
+    const target = data.redirect_url || "/";
+    status.textContent = "Restarting — reconnecting in " + secs + "s…";
+    const timer = setInterval(function() {
+      secs--;
+      if (secs <= 0) {
+        clearInterval(timer);
+        window.location.href = target;
+      } else {
+        status.textContent = "Restarting — reconnecting in " + secs + "s…";
+      }
+    }, 1000);
+  } catch (e) {
+    status.textContent = "Error: " + e.message;
+    btn.disabled = false;
   }
 }
 

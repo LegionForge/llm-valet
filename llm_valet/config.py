@@ -69,6 +69,12 @@ class Settings:
         self.key_acknowledged = True
         _save_settings(self)
 
+    def apply_network_config(self, host: str, port: int) -> None:
+        self.host = host
+        self.port = port
+        self.key_acknowledged = True
+        _save_settings(self)
+
     def update_thresholds(self, data: dict[str, Any]) -> dict[str, Any]:
         """Apply a partial threshold update and persist to disk."""
         allowed = {f.name for f in ResourceThresholds.__dataclass_fields__.values()}
