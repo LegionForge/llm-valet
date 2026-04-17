@@ -106,7 +106,8 @@ def load_settings() -> Settings:
 
 
 def _apply_yaml(settings: Settings, raw: dict[str, Any]) -> None:
-    for key in ("host", "port", "provider", "model_name", "api_key", "key_acknowledged", "log_file"):
+    for key in ("host", "port", "provider", "model_name", "api_key", "key_acknowledged",
+                "log_file"):
         if key in raw:
             setattr(settings, key, raw[key])
 

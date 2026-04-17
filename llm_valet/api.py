@@ -173,7 +173,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # T2 — DNS rebinding: reject any Host header not in the allowlist.
     # Without this a malicious page can rebind DNS to 127.0.0.1 and reach the API.
     allowed_hosts = ["localhost", "127.0.0.1", "*.local", *settings.extra_allowed_hosts]
-    if settings.host == "0.0.0.0":
+    if settings.host == "0.0.0.0":  # noqa: S104
         # Raw IP addresses in the Host header are not a DNS rebinding vector —
         # rebinding requires a domain name. Auto-allow local interface IPs so the
         # WebUI is reachable by IP immediately after LAN install without manual config.
@@ -254,7 +254,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def acknowledge_setup(request: Request) -> Any:
         # Localhost-only — prevents a LAN client from prematurely dismissing the modal.
         if not _is_local(request):
-            raise HTTPException(status_code=403, detail="Setup acknowledgment requires local access")
+            raise HTTPException(  # noqa: E501
+                status_code=403, detail="Setup acknowledgment requires local access"
+            )
         settings.acknowledge_key()
         return {"ok": True}
 
@@ -268,11 +270,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         port = int(body.get("port", 8765))
 
         # Validate host — must be a known safe value or a valid IP
-        if host not in ("127.0.0.1", "0.0.0.0"):
+        if host not in ("127.0.0.1", "0.0.0.0"):  # noqa: S104
             try:
                 ipaddress.ip_address(host)
-            except ValueError:
-                raise HTTPException(status_code=400, detail="Invalid host address")
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail="Invalid host address") from exc
 
         if not (1024 <= port <= 65535):
             raise HTTPException(status_code=400, detail="Port must be between 1024 and 65535")
@@ -280,7 +282,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         settings.apply_network_config(host, port)
 
         # Browser redirect target — 0.0.0.0 binds all interfaces but browsers need a real host
-        display_host = "localhost" if host in ("127.0.0.1", "0.0.0.0") else host
+        display_host = "localhost" if host in ("127.0.0.1", "0.0.0.0") else host  # noqa: S104
         redirect_url = f"http://{display_host}:{port}/"
 
         # Trigger graceful restart via call_later so the HTTP response returns first.
