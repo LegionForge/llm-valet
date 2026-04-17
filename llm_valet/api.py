@@ -244,7 +244,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"service": "llm-valet", "docs": "/docs"}
 
     def _is_local(request: Request) -> bool:
-        return bool(request.client) and request.client.host in ("127.0.0.1", "::1")
+        client = request.client
+        return client is not None and client.host in ("127.0.0.1", "::1")
 
     @app.get("/setup", include_in_schema=False)
     async def setup_status(request: Request) -> Any:
