@@ -589,6 +589,7 @@ class TestPostForceStop:
         assert data["action"] == "force_stop"
 
     def test_wrong_api_key_returns_401(self) -> None:
+
         """Correct api_key set in settings but wrong key in header → 401."""
         mock_provider  = _make_mock_provider()
         mock_collector = _make_mock_collector()
@@ -606,3 +607,51 @@ class TestPostForceStop:
         with TestClient(app, raise_server_exceptions=False) as client:
             r = client.get("/status", headers={"X-API-Key": "wrong-key"})
             assert r.status_code == 401
+
+
+class TestSecurityInputValidation:
+    """Model name regex and body size limit (E8a, E8b)."""
+
+    @pytest.mark.parametrize("bad_name", [
+        "test; echo injected",
+        "$(whoami)",
+        "model\x00null",
+        "../../../etc/passwd",
+        "model name with spaces",
+        "",
+    ])
+    def test_load_rejects_invalid_model_name(self, api: tuple, bad_name: str) -> None:
+        client, _, _ = api
+        r = client.post("/load", json={"model": bad_name})
+        assert r.status_code == 422
+
+    @pytest.mark.parametrize("bad_name", [
+        "test; echo injected",
+        "$(whoami)",
+        "../etc/passwd",
+    ])
+    def test_pull_rejects_invalid_model_name(self, api: tuple, bad_name: str) -> None:
+        client, _, _ = api
+        r = client.post("/models/pull", json={"model": bad_name})
+        assert r.status_code == 422
+
+    @pytest.mark.parametrize("good_name", [
+        "llama3.2:3b",
+        "qwen3.5:0.8b",
+        "mistral:latest",
+        "my-model_v2.0",
+    ])
+    def test_load_accepts_valid_model_name(self, api: tuple, good_name: str) -> None:
+        client, _, _ = api
+        r = client.post("/load", json={"model": good_name})
+        assert r.status_code == 200
+
+    def test_put_config_rejects_oversized_body(self, api: tuple) -> None:
+        client, _, _ = api
+        big_body = b'{"ram_pause_pct": 85.0, "padding": "' + b"A" * 65536 + b'"}'
+        r = client._tc.put(
+            "/config",
+            content=big_body,
+            headers={"Content-Type": "application/json", "X-API-Key": _TEST_API_KEY},
+        )
+        assert r.status_code == 413

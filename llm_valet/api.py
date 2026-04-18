@@ -3,6 +3,7 @@ import ipaddress
 import logging
 import logging.handlers
 import os
+import re
 import socket
 import sys
 import time
@@ -11,7 +12,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse
@@ -25,7 +26,19 @@ from llm_valet.watchdog import Watchdog
 
 logger = logging.getLogger(__name__)
 
-_VERSION = "0.5.3"
+_VERSION = "0.5.4"
+
+# T4 — model names are passed to Ollama CLI/API; only safe characters allowed.
+# Prevents injection even though shell=False is enforced throughout.
+_MODEL_RE = re.compile(r"^[a-zA-Z0-9:._-]+$")
+
+# Prevents memory-pressure DoS via enormous JSON bodies on mutation endpoints.
+_MAX_BODY_BYTES = 64 * 1024  # 64 KB
+
+
+def _validate_model_name(name: str) -> None:
+    if not _MODEL_RE.match(name):
+        raise HTTPException(status_code=422, detail="invalid model name")
 
 
 class _RateLimiter:
@@ -188,6 +201,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 if addr.family == socket.AF_INET and not addr.address.startswith("127."):
                     allowed_hosts.append(addr.address)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts)
+
+    # Body size limit — rejects oversized JSON bodies before they are parsed.
+    # 64 KB is well above any legitimate PUT /config payload (~200 bytes).
+    @app.middleware("http")
+    async def limit_body_size(request: Request, call_next):
+        cl = request.headers.get("content-length")
+        if cl and int(cl) > _MAX_BODY_BYTES:
+            return Response("Request body too large", status_code=413)
+        return await call_next(request)
 
     # T3 — CORS wildcard prevention: allow_origins is config-only, never "*".
     # Cross-origin JS cannot reach the API unless an explicit origin is listed in config.
@@ -412,6 +434,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         model_name = body.get("model", "")
         if not isinstance(model_name, str) or not model_name:
             raise HTTPException(status_code=422, detail="model field required")
+        _validate_model_name(model_name)
         raw_ctx = body.get("num_ctx")
         num_ctx: int | None = None
         if raw_ctx is not None:
@@ -430,6 +453,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         p: Annotated[LLMProvider, Depends(get_provider)],
     ) -> dict[str, Any]:
         """Delete a locally stored model."""
+        _validate_model_name(model_name)
         success = await p.delete_model(model_name)
         return {"ok": success, "action": "delete", "model": model_name}
 
@@ -446,6 +470,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         model_name = body.get("model", "")
         if not isinstance(model_name, str) or not model_name:
             raise HTTPException(status_code=422, detail="model field required")
+        _validate_model_name(model_name)
         # Guard against disk exhaustion — large models can fill the drive mid-download
         # and corrupt Ollama's model index. Require at least 5 GB free before starting.
         disk = c.collect().disk
