@@ -152,4 +152,4 @@ test = "pytest"
 audit = "pip-audit"
 
 [tool.hatch.build.targets.wheel]
-packages = ["llm_valet"]
+packages = ["llm_valet", "svcmgr"]
