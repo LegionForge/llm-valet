@@ -527,7 +527,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         body: dict[str, Any],
     ) -> dict[str, Any]:
         """Update thresholds at runtime and persist to config.yaml."""
-        updated = settings.update_thresholds(body)
+        try:
+            updated = settings.update_thresholds(body)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {"ok": True, "thresholds": updated}
 
     return app

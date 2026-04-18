@@ -135,3 +135,48 @@ class TestSettingsDefaults:
         # Bypass file write by patching _save_settings is complex; test field mutation only
         s.thresholds.ram_pause_pct = 75.0
         assert s.thresholds.ram_pause_pct == 75.0
+
+    def test_update_thresholds_rejects_pct_above_100(self) -> None:
+        s = Settings()
+        with pytest.raises(ValueError, match="ram_pause_pct"):
+            s.update_thresholds({"ram_pause_pct": 150.0})
+
+    def test_update_thresholds_rejects_negative_pct(self) -> None:
+        s = Settings()
+        with pytest.raises(ValueError, match="ram_pause_pct"):
+            s.update_thresholds({"ram_pause_pct": -5.0})
+
+    def test_update_thresholds_rejects_zero_pct(self) -> None:
+        s = Settings()
+        with pytest.raises(ValueError, match="ram_pause_pct"):
+            s.update_thresholds({"ram_pause_pct": 0.0})
+
+    def test_update_thresholds_rejects_inverted_hysteresis(self) -> None:
+        s = Settings()
+        # resume >= pause is invalid
+        with pytest.raises(ValueError, match="ram_resume_pct"):
+            s.update_thresholds({"ram_pause_pct": 60.0, "ram_resume_pct": 85.0})
+
+    def test_update_thresholds_rejects_resume_equal_to_pause(self) -> None:
+        s = Settings()
+        with pytest.raises(ValueError, match="ram_resume_pct"):
+            s.update_thresholds({"ram_pause_pct": 85.0, "ram_resume_pct": 85.0})
+
+    def test_update_thresholds_rejects_check_interval_zero(self) -> None:
+        s = Settings()
+        with pytest.raises(ValueError, match="check_interval_seconds"):
+            s.update_thresholds({"check_interval_seconds": 0})
+
+    def test_update_thresholds_rejects_check_interval_negative(self) -> None:
+        s = Settings()
+        with pytest.raises(ValueError, match="check_interval_seconds"):
+            s.update_thresholds({"check_interval_seconds": -1})
+
+    def test_update_thresholds_does_not_mutate_on_error(self) -> None:
+        s = Settings()
+        original = s.thresholds.ram_pause_pct
+        try:
+            s.update_thresholds({"ram_pause_pct": 150.0})
+        except ValueError:
+            pass
+        assert s.thresholds.ram_pause_pct == original

@@ -76,14 +76,39 @@ class Settings:
         _save_settings(self)
 
     def update_thresholds(self, data: dict[str, Any]) -> dict[str, Any]:
-        """Apply a partial threshold update and persist to disk."""
+        """Apply a partial threshold update and persist to disk.
+
+        Raises ValueError for out-of-range or logically invalid values so the
+        API layer can return a 400 without writing corrupt state to disk.
+        """
+        _PCT_FIELDS = {
+            "ram_pause_pct", "ram_resume_pct", "cpu_pause_pct", "gpu_vram_pause_pct"
+        }
         allowed = {f.name for f in ResourceThresholds.__dataclass_fields__.values()}
+        candidate = asdict(self.thresholds)
         for key, value in data.items():
             if key in allowed:
-                setattr(self.thresholds, key, value)
+                if key in _PCT_FIELDS:
+                    if not isinstance(value, (int, float)):
+                        raise ValueError(f"{key} must be a number")
+                    if not (0.0 < float(value) <= 100.0):
+                        raise ValueError(f"{key} must be between 0 and 100, got {value}")
+                if key == "check_interval_seconds":
+                    if not isinstance(value, int) or value < 1:
+                        raise ValueError(f"check_interval_seconds must be an integer >= 1, got {value}")
+                candidate[key] = value
             else:
                 safe_key = str(key).replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
                 logger.warning("unknown threshold key ignored", extra={"key": safe_key})
+        # Validate hysteresis invariant on the merged candidate
+        if float(candidate["ram_resume_pct"]) >= float(candidate["ram_pause_pct"]):
+            raise ValueError(
+                f"ram_resume_pct ({candidate['ram_resume_pct']}) must be less than "
+                f"ram_pause_pct ({candidate['ram_pause_pct']})"
+            )
+        for key, value in candidate.items():
+            if key in allowed:
+                setattr(self.thresholds, key, value)
         _save_settings(self)
         return asdict(self.thresholds)
 
