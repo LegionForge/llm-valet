@@ -12,8 +12,9 @@ from llm_valet.providers.base import LLMProvider, ModelInfo, ProviderStatus
 
 logger = logging.getLogger(__name__)
 
-# Model name validation — must match before any subprocess/API use
-_MODEL_NAME_RE = re.compile(r"^[a-zA-Z0-9:._-]+$")
+# Model name validation — must match before any subprocess/API use.
+# Length cap (200) guards against DoS via oversized strings in logs/API calls.
+_MODEL_NAME_RE = re.compile(r"^[a-zA-Z0-9:._-]{1,200}$")
 
 # How long to wait for graceful shutdown before escalating
 _SIGTERM_TIMEOUT_S = 30
@@ -47,6 +48,9 @@ class OllamaProvider(LLMProvider):
         # resume if options are not re-applied.  /api/ps is empty after eviction
         # so this must be captured before the keep_alive=0 call.
         self._last_loaded_ctx: int | None = None
+        # Prevents concurrent load_model() calls from interleaving their
+        # unload/load sequences and leaving _model_name in an inconsistent state.
+        self._load_lock = asyncio.Lock()
 
     # ── LLMProvider interface ─────────────────────────────────────────────────
 
@@ -280,7 +284,12 @@ class OllamaProvider(LLMProvider):
           4. Update _model_name so future pause/resume use the new model.
         num_ctx overrides Ollama's default context window for this load.
         Must be >= 512 if provided; silently ignored if out of range.
+        Serialised by _load_lock — concurrent /load calls are queued, not raced.
         """
+        async with self._load_lock:
+            return await self._load_model_locked(model_name, num_ctx)
+
+    async def _load_model_locked(self, model_name: str, num_ctx: int | None = None) -> bool:
         if not _MODEL_NAME_RE.match(model_name):
             logger.error("load_model rejected — invalid model name", extra={"model": model_name})
             return False

@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Request, Response
+from starlette.middleware.base import RequestResponseEndpoint
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse
@@ -30,7 +31,8 @@ _VERSION = "0.5.4"
 
 # T4 — model names are passed to Ollama CLI/API; only safe characters allowed.
 # Prevents injection even though shell=False is enforced throughout.
-_MODEL_RE = re.compile(r"^[a-zA-Z0-9:._-]+$")
+# Length cap (200) guards against DoS via oversized strings in logs/API calls.
+_MODEL_RE = re.compile(r"^[a-zA-Z0-9:._-]{1,200}$")
 
 # Prevents memory-pressure DoS via enormous JSON bodies on mutation endpoints.
 _MAX_BODY_BYTES = 64 * 1024  # 64 KB
@@ -205,7 +207,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Body size limit — rejects oversized JSON bodies before they are parsed.
     # 64 KB is well above any legitimate PUT /config payload (~200 bytes).
     @app.middleware("http")
-    async def limit_body_size(request: Request, call_next):
+    async def limit_body_size(request: Request, call_next: RequestResponseEndpoint) -> Response:
         cl = request.headers.get("content-length")
         if cl and int(cl) > _MAX_BODY_BYTES:
             return Response("Request body too large", status_code=413)

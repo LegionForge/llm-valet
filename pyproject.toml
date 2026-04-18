@@ -87,6 +87,12 @@ ignore = [
     "S607",   # partial executable path — acceptable for system binaries (ioreg, launchctl, etc.)
 ]
 
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+    "S101",   # assert is the correct pytest assertion idiom — not a security risk in tests
+    "S106",   # hardcoded password/key — test fixtures always use static test values
+]
+
 [tool.bandit]
 exclude_dirs = [".venv", "venv", ".git"]
 skips = [
