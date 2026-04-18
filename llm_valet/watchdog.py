@@ -12,10 +12,11 @@ logger = logging.getLogger(__name__)
 
 
 class WatchdogState(enum.Enum):
-    RUNNING  = "running"
-    PAUSING  = "pausing"
-    PAUSED   = "paused"
-    RESUMING = "resuming"
+    RUNNING       = "running"
+    PAUSING       = "pausing"
+    PAUSED        = "paused"
+    RESUMING      = "resuming"
+    PROVIDER_DOWN = "provider_down"
 
 
 class Watchdog:
@@ -98,6 +99,31 @@ class Watchdog:
     # ── Tick ──────────────────────────────────────────────────────────────────
 
     async def _tick(self) -> None:
+        # Detect provider crashes so state doesn't stay stuck at RUNNING/PAUSED
+        # when Ollama exits unexpectedly.  One lightweight health probe per tick.
+        if self._state in (WatchdogState.RUNNING, WatchdogState.PAUSED):
+            try:
+                healthy = await self._provider.health_check()
+            except Exception:
+                healthy = False
+            if not healthy:
+                self._state = WatchdogState.PROVIDER_DOWN
+                self._last_reason = "provider unreachable"
+                logger.warning("provider unreachable — entering PROVIDER_DOWN")
+                return
+        elif self._state == WatchdogState.PROVIDER_DOWN:
+            try:
+                healthy = await self._provider.health_check()
+            except Exception:
+                healthy = False
+            if not healthy:
+                logger.debug("provider still down — waiting for recovery")
+                return
+            self._state = WatchdogState.RUNNING
+            self._last_reason = "provider recovered"
+            logger.info("provider recovered — returning to RUNNING")
+            # Fall through: evaluate resources immediately on recovery tick
+
         metrics = self._collector.collect()
         game_detected, game_reason = _detect_game()
         resource_pressure, resource_reason = self._engine.evaluate(metrics)

@@ -5,6 +5,7 @@ and mocked game detection.  No real psutil, no real provider.
 These tests call _tick() directly rather than run() to avoid the sleep loop.
 _detect_game is patched at the module level so psutil is never touched.
 """
+import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -55,10 +56,12 @@ def _watchdog(
     pause_timeout: int = 0,
     cpu_sustained_seconds: int = 0,
     auto_resume_on_ram: bool = True,
+    health_ok: bool = True,
 ) -> Watchdog:
     provider = MagicMock()
-    provider.pause  = AsyncMock(return_value=pause_ok)
-    provider.resume = AsyncMock(return_value=resume_ok)
+    provider.pause        = AsyncMock(return_value=pause_ok)
+    provider.resume       = AsyncMock(return_value=resume_ok)
+    provider.health_check = AsyncMock(return_value=health_ok)
 
     collector = MagicMock()
     collector.collect = MagicMock(return_value=_metrics(ram_pct=ram_pct, cpu_pct=cpu_pct))
@@ -247,3 +250,63 @@ class TestFullCycle:
 
         wd._provider.pause.assert_called_once()
         wd._provider.resume.assert_called_once()
+
+
+# ── Provider-down detection (Gap 3) ──────────────────────────────────────────
+
+class TestProviderDown:
+    async def test_running_provider_crash_transitions_to_provider_down(self) -> None:
+        wd = _watchdog(health_ok=False)
+        with patch("llm_valet.watchdog._detect_game", return_value=(False, "")):
+            await wd._tick()
+        assert wd.state == WatchdogState.PROVIDER_DOWN
+        assert "unreachable" in wd.last_reason
+        wd._provider.pause.assert_not_called()
+
+    async def test_provider_down_recovers_to_running(self) -> None:
+        wd = _watchdog(health_ok=True)
+        wd._state = WatchdogState.PROVIDER_DOWN
+        with patch("llm_valet.watchdog._detect_game", return_value=(False, "")):
+            await wd._tick()
+        assert wd.state == WatchdogState.RUNNING
+        assert "recovered" in wd.last_reason
+
+    async def test_provider_down_stays_down_when_still_unhealthy(self) -> None:
+        wd = _watchdog(health_ok=False)
+        wd._state = WatchdogState.PROVIDER_DOWN
+        with patch("llm_valet.watchdog._detect_game", return_value=(False, "")):
+            await wd._tick()
+        assert wd.state == WatchdogState.PROVIDER_DOWN
+        wd._provider.pause.assert_not_called()
+
+    async def test_paused_provider_crash_transitions_to_provider_down(self) -> None:
+        wd = _watchdog(health_ok=False)
+        wd._state = WatchdogState.PAUSED
+        wd._paused_at = time.monotonic()
+        with patch("llm_valet.watchdog._detect_game", return_value=(False, "")):
+            await wd._tick()
+        assert wd.state == WatchdogState.PROVIDER_DOWN
+
+    async def test_health_check_exception_treated_as_down(self) -> None:
+        wd = _watchdog()
+        wd._provider.health_check = AsyncMock(side_effect=Exception("conn refused"))
+        with patch("llm_valet.watchdog._detect_game", return_value=(False, "")):
+            await wd._tick()
+        assert wd.state == WatchdogState.PROVIDER_DOWN
+
+    async def test_provider_down_recover_exception_stays_down(self) -> None:
+        wd = _watchdog()
+        wd._state = WatchdogState.PROVIDER_DOWN
+        wd._provider.health_check = AsyncMock(side_effect=Exception("conn refused"))
+        with patch("llm_valet.watchdog._detect_game", return_value=(False, "")):
+            await wd._tick()
+        assert wd.state == WatchdogState.PROVIDER_DOWN
+
+    async def test_recovered_provider_immediately_evaluates_resources(self) -> None:
+        """On recovery tick, resource evaluation fires — high RAM should pause."""
+        wd = _watchdog(ram_pct=90.0, health_ok=True)  # RAM above 85% threshold
+        wd._state = WatchdogState.PROVIDER_DOWN
+        with patch("llm_valet.watchdog._detect_game", return_value=(False, "")):
+            await wd._tick()
+        # Recovered + high RAM → should immediately pause
+        assert wd.state == WatchdogState.PAUSED
