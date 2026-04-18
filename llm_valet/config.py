@@ -95,7 +95,9 @@ class Settings:
                         raise ValueError(f"{key} must be between 0 and 100, got {value}")
                 if key == "check_interval_seconds":
                     if not isinstance(value, int) or value < 1:
-                        raise ValueError(f"check_interval_seconds must be an integer >= 1, got {value}")
+                        raise ValueError(
+                            f"check_interval_seconds must be an integer >= 1, got {value}"
+                        )
                 candidate[key] = value
             else:
                 safe_key = str(key).replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
