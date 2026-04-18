@@ -383,6 +383,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         w: Annotated[Watchdog, Depends(get_watchdog)],
     ) -> dict[str, Any]:
         """Manual pause — unload model from memory."""
+        rate_limiter.check("pause", 2.0)
         success = await p.pause()
         if success:
             w.notify_manual_pause()
@@ -408,6 +409,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         w: Annotated[Watchdog, Depends(get_watchdog)],
     ) -> dict[str, Any]:
         """Manual resume — pre-warm model into memory."""
+        rate_limiter.check("resume", 2.0)
         success = await p.resume()
         if success:
             w.notify_manual_resume()

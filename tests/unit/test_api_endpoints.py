@@ -655,3 +655,47 @@ class TestSecurityInputValidation:
             headers={"Content-Type": "application/json", "X-API-Key": _TEST_API_KEY},
         )
         assert r.status_code == 413
+
+
+class TestMassAssignment:
+    """PUT /config must not allow overwriting security-sensitive Settings fields."""
+
+    @pytest.mark.parametrize("field,value", [
+        ("api_key", "hacked"),
+        ("host", "0.0.0.0"),
+        ("port", 9999),
+        ("provider", "evil"),
+        ("ollama_url", "http://evil.com/"),
+        ("log_file", "/etc/cron.d/evil"),
+        ("key_acknowledged", False),
+    ])
+    def test_sensitive_fields_ignored_by_put_config(
+        self, api: tuple, field: str, value: object
+    ) -> None:
+        client, _, _ = api
+        r = client.put("/config", json={field: value})
+        # Must not crash and must not reflect the injected value back
+        assert r.status_code == 200
+        body = r.json()
+        # The response only contains ResourceThresholds keys — never Settings fields
+        assert field not in body.get("thresholds", body)
+
+
+class TestRateLimiting:
+    """Rapid repeated calls to control endpoints return 429."""
+
+    @pytest.mark.parametrize("endpoint", ["/pause", "/resume"])
+    def test_rapid_calls_rate_limited(self, api: tuple, endpoint: str) -> None:
+        client, _, _ = api
+        r1 = client.post(endpoint)
+        assert r1.status_code == 200
+        r2 = client.post(endpoint)
+        assert r2.status_code == 429
+
+    @pytest.mark.parametrize("endpoint", ["/stop", "/start"])
+    def test_stop_start_rate_limited(self, api: tuple, endpoint: str) -> None:
+        client, _, _ = api
+        r1 = client.post(endpoint)
+        assert r1.status_code == 200
+        r2 = client.post(endpoint)
+        assert r2.status_code == 429
