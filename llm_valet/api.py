@@ -267,6 +267,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return FileResponse(index_file)
         return {"service": "llm-valet", "docs": "/docs"}
 
+    @app.get("/favicon.ico", include_in_schema=False)
+    async def favicon() -> Any:
+        favicon_file = static_dir / "favicon.ico"
+        if favicon_file.is_file():
+            return FileResponse(favicon_file, media_type="image/x-icon")
+        return Response(status_code=404)
+
     def _is_local(request: Request) -> bool:
         client = request.client
         return client is not None and client.host in ("127.0.0.1", "::1")
