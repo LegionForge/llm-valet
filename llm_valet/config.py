@@ -126,7 +126,12 @@ def load_settings() -> Settings:
                 raw: dict[str, Any] = yaml.safe_load(f) or {}
             _apply_yaml(settings, raw)
         except yaml.YAMLError as exc:
-            logger.error("failed to parse config.yaml", extra={"error": str(exc)})
+            logger.error(
+                "config.yaml is corrupt and could not be parsed — "
+                "delete %s to reset to defaults",
+                _CONFIG_PATH,
+                extra={"error": str(exc)},
+            )
 
     _apply_env_overrides(settings)
     return settings
@@ -190,11 +195,18 @@ def _save_settings(settings: Settings) -> None:
     with _CONFIG_PATH.open("w", encoding="utf-8") as f:
         yaml.safe_dump(raw, f, default_flow_style=False)
 
-    # Enforce 0600 — api_key must not be world-readable (T8)
+    # Enforce 0600 — api_key must not be world-readable (T8).
+    # On Windows, Python's chmod only controls the read-only attribute and does not
+    # set ACLs — this mitigation is macOS/Linux only. Full Windows enforcement
+    # requires icacls and is deferred to v1.x.
     try:
         _CONFIG_PATH.chmod(0o600)
     except OSError:
-        logger.warning("could not set config.yaml to 0600 — check permissions")
+        logger.warning(
+            "could not set config.yaml to 0600 — "
+            "delete %s and restart to reset permissions",
+            _CONFIG_PATH,
+        )
 
 
 def _check_config_permissions(path: Path) -> None:
@@ -207,4 +219,4 @@ def _check_config_permissions(path: Path) -> None:
                 extra={"path": str(path)},
             )
     except OSError:
-        pass
+        logger.debug("could not stat config.yaml — delete %s to reset", _CONFIG_PATH)

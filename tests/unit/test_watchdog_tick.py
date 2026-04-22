@@ -310,3 +310,95 @@ class TestProviderDown:
             await wd._tick()
         # Recovered + high RAM → should immediately pause
         assert wd.state == WatchdogState.PAUSED
+
+
+# ── Transition failure paths ──────────────────────────────────────────────────
+
+class TestTransitionFailures:
+    async def test_resume_fail_stays_paused(self) -> None:
+        """If provider.resume() fails, state rolls back to PAUSED — not stuck at RESUMING."""
+        wd = _watchdog(ram_pct=50.0, resume_ok=False, pause_timeout=0)
+        wd._pause_trigger = "game"
+        wd._state = WatchdogState.PAUSED
+        wd._paused_at = 0.0  # grace already elapsed
+
+        with patch("llm_valet.watchdog._detect_game", return_value=(False, "")):
+            await wd._tick()
+
+        assert wd.state == WatchdogState.PAUSED
+        wd._provider.resume.assert_called_once()
+
+    async def test_paused_while_game_still_running_is_noop(self) -> None:
+        """PAUSED + game still active: no pause() or resume() call — tick is a pure no-op."""
+        wd = _watchdog(ram_pct=50.0, pause_timeout=3600)
+        wd._pause_trigger = "game"
+        wd._state = WatchdogState.PAUSED
+        wd._paused_at = time.monotonic()
+
+        with patch(
+            "llm_valet.watchdog._detect_game",
+            return_value=(True, "game detected — steamapps/common/Hades"),
+        ):
+            await wd._tick()
+
+        assert wd.state == WatchdogState.PAUSED
+        wd._provider.pause.assert_not_called()
+        wd._provider.resume.assert_not_called()
+
+    async def test_hysteresis_zone_stays_paused(self) -> None:
+        """RAM between ram_resume_pct and ram_pause_pct — safe_to_resume is False, no resume."""
+        # RAM=70% is above resume threshold (60%) but below pause threshold (85%)
+        wd = _watchdog(ram_pct=70.0, pause_timeout=0)
+        wd._pause_trigger = "game"
+        wd._state = WatchdogState.PAUSED
+        wd._paused_at = 0.0  # grace already elapsed
+
+        with patch("llm_valet.watchdog._detect_game", return_value=(False, "")):
+            await wd._tick()
+
+        assert wd.state == WatchdogState.PAUSED
+        wd._provider.resume.assert_not_called()
+
+
+# ── GPU pressure ──────────────────────────────────────────────────────────────
+
+def _metrics_with_gpu(vram_pct: float = 50.0) -> SystemMetrics:
+    from llm_valet.resources.base import DiskMetrics
+    return SystemMetrics(
+        memory=MemoryMetrics(
+            total_mb=16384,
+            used_mb=8192,
+            used_pct=50.0,
+            pressure=PressureLevel.NORMAL,
+        ),
+        cpu=CPUMetrics(used_pct=20.0, core_count=8),
+        gpu=GPUMetrics(
+            available=True,
+            vram_total_mb=8192,
+            vram_used_mb=int(8192 * vram_pct / 100),
+            vram_used_pct=vram_pct,
+            compute_pct=50.0,
+        ),
+        disk=DiskMetrics(path="/", total_mb=512000, used_mb=128000, free_mb=384000, used_pct=25.0),
+    )
+
+
+class TestGpuPressure:
+    async def test_gpu_vram_above_threshold_triggers_pause(self) -> None:
+        wd = _watchdog()
+        wd._collector.collect = MagicMock(return_value=_metrics_with_gpu(vram_pct=90.0))
+
+        with patch("llm_valet.watchdog._detect_game", return_value=(False, "")):
+            await wd._tick()
+
+        assert wd.state == WatchdogState.PAUSED
+        assert wd._pause_trigger == "gpu"
+
+    async def test_gpu_vram_below_threshold_no_pause(self) -> None:
+        wd = _watchdog()
+        wd._collector.collect = MagicMock(return_value=_metrics_with_gpu(vram_pct=70.0))
+
+        with patch("llm_valet.watchdog._detect_game", return_value=(False, "")):
+            await wd._tick()
+
+        assert wd.state == WatchdogState.RUNNING

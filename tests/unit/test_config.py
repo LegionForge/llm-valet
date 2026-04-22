@@ -1,10 +1,18 @@
 """Tests for config loading, env overrides, and settings validation."""
 import os
 import textwrap
+from unittest.mock import patch
 
 import pytest
 
-from llm_valet.config import Settings, _apply_env_overrides, _apply_yaml
+import llm_valet.config as config_module
+from llm_valet.config import (
+    Settings,
+    _apply_env_overrides,
+    _apply_yaml,
+    _validate_provider_url,
+    load_settings,
+)
 
 
 # ── _apply_yaml ────────────────────────────────────────────────────────────────
@@ -180,3 +188,120 @@ class TestSettingsDefaults:
         except ValueError:
             pass
         assert s.thresholds.ram_pause_pct == original
+
+    def test_update_thresholds_rejects_non_numeric_pct(self) -> None:
+        s = Settings()
+        with pytest.raises(ValueError, match="ram_pause_pct"):
+            s.update_thresholds({"ram_pause_pct": "high"})
+
+    def test_acknowledge_key_sets_flag_and_saves(self) -> None:
+        s = Settings()
+        with patch("llm_valet.config._save_settings") as mock_save:
+            s.acknowledge_key()
+        assert s.key_acknowledged is True
+        mock_save.assert_called_once_with(s)
+
+    def test_apply_network_config_sets_fields_and_saves(self) -> None:
+        s = Settings()
+        with patch("llm_valet.config._save_settings") as mock_save:
+            s.apply_network_config("0.0.0.0", 9000)
+        assert s.host == "0.0.0.0"
+        assert s.port == 9000
+        assert s.key_acknowledged is True
+        mock_save.assert_called_once_with(s)
+
+
+# ── _validate_provider_url (T6 SSRF) ──────────────────────────────────────────
+
+class TestValidateProviderUrl:
+    """Cover every branch of the SSRF guard."""
+
+    # --- accepted ---
+    def test_http_loopback(self) -> None:
+        assert _validate_provider_url("http://127.0.0.1:11434")
+
+    def test_https_loopback(self) -> None:
+        assert _validate_provider_url("https://127.0.0.1:11434")
+
+    def test_localhost_name(self) -> None:
+        assert _validate_provider_url("http://localhost:11434")
+
+    def test_ipv6_loopback(self) -> None:
+        # RFC 2732 bracket form is required for IPv6 in URLs
+        assert _validate_provider_url("http://[::1]:11434")
+
+    def test_mdns_local(self) -> None:
+        assert _validate_provider_url("http://mac-mini.local:11434")
+
+    def test_rfc1918_192(self) -> None:
+        assert _validate_provider_url("http://192.168.1.100:11434")
+
+    def test_rfc1918_10(self) -> None:
+        assert _validate_provider_url("http://10.0.0.5:11434")
+
+    def test_rfc1918_172(self) -> None:
+        assert _validate_provider_url("http://172.16.0.1:11434")
+
+    # --- rejected: bad scheme ---
+    def test_ftp_scheme_rejected(self) -> None:
+        assert not _validate_provider_url("ftp://127.0.0.1:11434")
+
+    def test_no_scheme_rejected(self) -> None:
+        assert not _validate_provider_url("127.0.0.1:11434")
+
+    # --- rejected: empty / missing host ---
+    def test_empty_string_rejected(self) -> None:
+        assert not _validate_provider_url("")
+
+    def test_scheme_only_rejected(self) -> None:
+        assert not _validate_provider_url("http://")
+
+    # --- rejected: public / routable addresses ---
+    def test_public_ip_rejected(self) -> None:
+        assert not _validate_provider_url("http://8.8.8.8:11434")
+
+    def test_aws_metadata_rejected(self) -> None:
+        # Link-local; not RFC1918 — SSRF classic target
+        assert not _validate_provider_url("http://169.254.169.254")
+
+    def test_public_domain_rejected(self) -> None:
+        # Hostname that isn't localhost/.local — hits ValueError in ip_address(), returns False
+        assert not _validate_provider_url("http://evil.com:11434")
+
+    def test_malformed_url_rejected(self) -> None:
+        # Exercises the outer except branch
+        assert not _validate_provider_url("http://[invalid-ipv6")
+
+
+# ── _apply_yaml — ollama_url validation ───────────────────────────────────────
+
+class TestApplyYamlOllamaUrl:
+    def test_valid_ollama_url_accepted(self) -> None:
+        s = Settings()
+        _apply_yaml(s, {"ollama_url": "http://192.168.1.50:11434"})
+        assert s.ollama_url == "http://192.168.1.50:11434"
+
+    def test_invalid_ollama_url_rejected_keeps_default(self) -> None:
+        s = Settings()
+        default = s.ollama_url
+        _apply_yaml(s, {"ollama_url": "http://evil.com:11434"})
+        assert s.ollama_url == default
+
+    def test_public_ip_ollama_url_rejected(self) -> None:
+        s = Settings()
+        default = s.ollama_url
+        _apply_yaml(s, {"ollama_url": "http://8.8.8.8:11434"})
+        assert s.ollama_url == default
+
+
+# ── load_settings — error handling ────────────────────────────────────────────
+
+class TestLoadSettingsErrorHandling:
+    def test_corrupt_yaml_returns_defaults(self, tmp_path: pytest.TempdirFactory, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Corrupt config.yaml must not raise — fall back to defaults."""
+        corrupt = tmp_path / "config.yaml"
+        corrupt.write_text("{ bad yaml: [unclosed")
+        monkeypatch.setattr(config_module, "_CONFIG_PATH", corrupt)
+        settings = load_settings()
+        assert settings.host == "127.0.0.1"
+        assert settings.port == 8765

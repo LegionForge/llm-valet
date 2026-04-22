@@ -152,12 +152,13 @@ class Watchdog:
             # Record what triggered this pause for resume-gating logic
             if game_detected:
                 self._pause_trigger = "game"
+            elif "GPU" in resource_reason:
+                # GPU checked before RAM — "GPU VRAM" contains the substring "RAM"
+                self._pause_trigger = "gpu"
             elif "RAM" in resource_reason:
                 self._pause_trigger = "ram"
             elif "CPU" in resource_reason:
                 self._pause_trigger = "cpu"
-            elif "GPU" in resource_reason:
-                self._pause_trigger = "gpu"
             else:
                 self._pause_trigger = "unknown"
             await self._transition_to_paused(reason)
