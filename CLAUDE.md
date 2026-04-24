@@ -45,7 +45,7 @@ A thorough search of existing tools (April 2026) confirmed this fills a real gap
 - Automatic pause/resume based on real-time resource pressure thresholds
 - Gaming activity detection (Steam native process watching)
 - Cross-platform REST API + web dashboard with manual override
-- Provider abstraction (Ollama, LM Studio, vLLM)
+- Provider abstraction (Ollama for v1.0; additional providers post-v1.0)
 
 **Nearest neighbors and why they don't overlap:**
 - **Open WebUI** (130k+ stars): chat UI only — no lifecycle control, no resource management
@@ -71,9 +71,8 @@ The architecture has two symmetric abstraction hierarchies:
 ```
 providers/          ← what serves the LLM
   base.py           LLMProvider ABC
-  ollama.py
-  lmstudio.py       (stub — future)
-  vllm.py           (stub — future)
+  ollama.py         Ollama (v1.0)
+                    # post-v1.0: LM Studio, vLLM, MLX (Apple Silicon)
 
 resources/          ← what monitors the machine
   base.py           ResourceCollector ABC + ThresholdEngine
@@ -94,15 +93,13 @@ llm-valet/
 │   ├── config.py           # Settings loader (config.yaml or env vars)
 │   ├── providers/
 │   │   ├── base.py         # LLMProvider ABC + ProviderStatus dataclass
-│   │   ├── ollama.py       # Ollama implementation
-│   │   ├── lmstudio.py     # LM Studio (stub — future)
-│   │   └── vllm.py         # vLLM (stub — future)
+│   │   └── ollama.py       # Ollama implementation (post-v1.0: LM Studio, vLLM, MLX)
 │   └── resources/
 │       ├── base.py         # ResourceCollector ABC, metric dataclasses, ThresholdEngine
 │       ├── macos.py        # macOS implementation
 │       ├── linux.py        # Linux implementation
 │       └── windows.py      # Windows implementation
-├── platform/
+├── svcmgr/
 │   ├── macos.py            # launchctl user agent management
 │   ├── linux.py            # systemd --user management
 │   └── windows.py          # Windows Service / sc.exe
@@ -363,7 +360,7 @@ macOS has two Ollama install paths with different plist locations:
 - **App**: `/Applications/Ollama.app` — check this first
 - **Brew CLI**: `~/Library/LaunchAgents/com.ollama.ollama.plist`
 
-`platform/macos.py` must branch on which variant is present.
+`svcmgr/macos.py` must branch on which variant is present.
 
 ### Graceful Stop Sequence
 
@@ -431,7 +428,7 @@ curl -H "X-API-Key: your-key" -X POST http://mac-mini.local:8765/pause
 5. `api.py` — FastAPI with all security middleware; validate every endpoint with curl
 6. `static/index.html` — resource bars, state badge, threshold sliders; `textContent` only
 7. `watchdog.py` — process detection + resource collector integration; test state transitions
-8. `platform/macos.py` — launchctl; handle both Ollama install variants
+8. `svcmgr/macos.py` — launchctl; handle both Ollama install variants
 9. `resources/linux.py` + `resources/windows.py` — remaining platforms
 10. `install/install.sh` + `install.ps1` — last, after app is stable
 
@@ -466,5 +463,29 @@ If the comment would read as a translation of the code into English, delete it.
 
 ## Parked Features (Do Not Implement Yet)
 
-- **Provider auto-update** — detecting/installing new Ollama/LM Studio releases. Silent auto-updates on a shared machine are risky; UI-prompted installs add significant complexity. When revisited: `updater.py`, mandatory user confirmation before any download.
-- **Model auto-update** — same rationale plus ambiguity of what "updated" means for a model.
+All items below are deferred to post-v1.0. Priorities and version targets will be set after v1.0 ships.
+
+### Additional Providers
+
+- **LM Studio** — `providers/lmstudio.py`. LM Studio exposes an OpenAI-compatible REST API; the `LLMProvider` ABC is designed to accommodate it. No code written yet.
+- **vLLM** — `providers/vllm.py`. Primarily Linux/server-focused; low priority until Linux platform is validated post-v1.0.
+- **MLX (Apple Silicon)** — `providers/mlx.py`. Apple's MLX framework (`mlx-lm`) runs models natively on M-series GPU/Neural Engine without Ollama as a middleman. Natural macOS-only addition post-v1.0.
+
+### Ollama Auto-Update (Homebrew installs only)
+
+Design decisions locked. Implementation home: `updater.py`.
+
+- **Scope:** Homebrew installs only. Ollama.app has its own Sparkle updater; Homebrew has no equivalent — that's the gap.
+- **Version check:** `brew info ollama --json` — not GitHub API (avoids rate limits; handles Homebrew formula lag naturally). Check cached daily.
+- **Privacy opt-out:** `check_for_updates: false` disables all outbound calls.
+- **Two config knobs (both default off):** `auto_update_ollama`, `refresh_homebrew_before_update`
+- **Pre-flight before showing update UI:** `which brew` succeeds → `brew list ollama` confirms Homebrew manages it → `brew list --pinned | grep ollama` (abort if pinned) → no dual-install collision.
+- **Update window:** Surface offer during natural pause events (game detected, resource pressure).
+- **Update flow:** drain active inference → pause → stop → `brew upgrade ollama` → verify binary hash against Ollama GitHub release checksums → start → health check → resume on success.
+- **Rollback:** `brew switch ollama <old_version>`. Binary-level guarantee only — model file compatibility not guaranteed across major versions; log a warning.
+- **Headless safety:** notify via WebUI badge + log entry — never silently execute on a machine with no one watching.
+- **Mandatory user confirmation** before any download — no silent auto-updates.
+
+### Model Auto-Update
+
+Ambiguity around what "updated" means for a model. Requires UI-prompted user confirmation. No timeline.

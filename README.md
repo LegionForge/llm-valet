@@ -29,7 +29,7 @@ A thorough search of existing tools (April 2026) confirmed this fills a real gap
 - Automatic pause/resume based on real-time resource pressure thresholds
 - Gaming activity detection (Steam native process watching)
 - Cross-platform REST API + web dashboard with manual override
-- Provider abstraction (Ollama, LM Studio, vLLM)
+- Provider abstraction (Ollama for v1.0; LM Studio, vLLM, MLX post-v1.0)
 
 | Nearest neighbor | Why it doesn't overlap |
 |---|---|
@@ -56,8 +56,9 @@ The GitHub issue [ollama/ollama#11085](https://github.com/ollama/ollama/issues/1
 | Provider | Status |
 |---|---|
 | Ollama | ✅ Implemented |
-| LM Studio | 🔜 Planned |
-| vLLM | 🔜 Planned |
+| LM Studio | post-v1.0 |
+| vLLM | post-v1.0 |
+| MLX (Apple Silicon) | post-v1.0 |
 
 ---
 
