@@ -148,6 +148,10 @@ class Watchdog:
 
         reason = game_reason or resource_reason
 
+        # PAUSING and RESUMING are intra-tick transient states — they exist only
+        # between the start of a transition method and when the provider call resolves.
+        # _tick() awaits those transitions inline, so these states are never observed
+        # at _tick() entry under normal operation; no branch is needed for them here.
         if self._state == WatchdogState.RUNNING and should_pause:
             # Record what triggered this pause for resume-gating logic
             if game_detected:

@@ -36,6 +36,8 @@ _MODEL_RE = re.compile(r"^[a-zA-Z0-9:._-]{1,200}$")
 
 # Prevents memory-pressure DoS via enormous JSON bodies on mutation endpoints.
 _MAX_BODY_BYTES = 64 * 1024  # 64 KB
+# Minimum free disk space required before accepting a model pull request.
+_MIN_FREE_MB = 5 * 1024  # 5 GB
 
 
 def _validate_model_name(name: str) -> None:
@@ -206,11 +208,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # Body size limit — rejects oversized JSON bodies before they are parsed.
     # 64 KB is well above any legitimate PUT /config payload (~200 bytes).
+    # Content-Length alone is insufficient — chunked transfer encoding omits it.
     @app.middleware("http")
     async def limit_body_size(request: Request, call_next: RequestResponseEndpoint) -> Response:
         cl = request.headers.get("content-length")
         if cl and int(cl) > _MAX_BODY_BYTES:
             return Response("Request body too large", status_code=413)
+        # Drain and buffer to catch chunked requests that omit Content-Length.
+        # Setting request._body re-injects the buffered body for downstream handlers:
+        # Starlette 1.x _CachedRequest.wrapped_receive() checks _body before
+        # _stream_consumed, so the downstream app still reads the correct body
+        # even though we consumed the stream here.
+        chunks: list[bytes] = []
+        total = 0
+        async for chunk in request.stream():
+            total += len(chunk)
+            if total > _MAX_BODY_BYTES:
+                return Response("Request body too large", status_code=413)
+            chunks.append(chunk)
+        request._body = b"".join(chunks)  # _body checked before _stream_consumed in wrapped_receive
         return await call_next(request)
 
     # T3 — CORS wildcard prevention: allow_origins is config-only, never "*".
@@ -485,7 +501,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # Guard against disk exhaustion — large models can fill the drive mid-download
         # and corrupt Ollama's model index. Require at least 5 GB free before starting.
         disk = c.collect().disk
-        _MIN_FREE_MB = 5 * 1024
         if disk.free_mb < _MIN_FREE_MB:
             raise HTTPException(
                 status_code=507,
@@ -553,9 +568,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/config")
     async def get_config(_: Auth) -> dict[str, Any]:
         """Read current thresholds and watchdog settings."""
-        return settings.thresholds.__dict__ | {
-            "check_interval_seconds": settings.thresholds.check_interval_seconds
-        }
+        return dict(settings.thresholds.__dict__)
 
     @app.put("/config")
     async def put_config(

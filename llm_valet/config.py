@@ -41,7 +41,7 @@ def _validate_provider_url(url: str) -> bool:
             return True
         addr = ipaddress.ip_address(host)
         return any(addr in net for net in _SAFE_PROVIDER_NETS)
-    except (ValueError, Exception):
+    except Exception:
         return False
 
 
@@ -169,11 +169,13 @@ def _apply_yaml(settings: Settings, raw: dict[str, Any]) -> None:
                 try:
                     v = float(value)  # type: ignore[arg-type]
                 except (TypeError, ValueError):
-                    logger.warning("invalid threshold value ignored", extra={"key": key, "value": value})
+                    logger.warning(
+                        "invalid threshold value ignored", extra={"key": key, "value": value}
+                    )
                     continue
                 if not (0.0 < v <= 100.0):
                     logger.warning(
-                        "threshold out of range (0–100) ignored",
+                        "threshold out of range (0-100) ignored",
                         extra={"key": key, "value": value},
                     )
                     continue
