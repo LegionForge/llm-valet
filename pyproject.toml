@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "llm-valet"
-version = "0.5.4"
+version = "0.5.5"
 description = "Cross-platform LLM lifecycle manager with resource-pressure and gaming-detection autopause"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -44,20 +44,21 @@ dependencies = [
 #
 # Apple Silicon (M-series): Metal GPU metrics implemented via ioreg — no extra needed.
 #
-# TODO v0.2: nvidia   — pynvml already integrated in resources/windows.py + linux.py
-# TODO v0.2: amd      — implement ROCm path in resources/linux.py using pyrsmi
-#                       https://github.com/RadeonOpenCompute/pyrsmi
-# TODO v0.2: intel    — implement Arc path using level-zero Python bindings
-#                       https://github.com/intel/level-zero
-# TODO v0.3: qualcomm — implement Snapdragon X NPU monitoring via Windows ML / QNN SDK
-#                       https://www.qualcomm.com/developer/software/qualcomm-ai-engine-direct-sdk
-# TODO v0.3: directml — implement DirectX 12 VRAM fallback for any Windows GPU vendor
-#                       via pydirectml or WMI Win32_VideoController queries
+# TODO post-v1.0: nvidia   — pynvml already integrated in resources/windows.py + linux.py;
+#                            wire optional dep and validate on real NVIDIA hardware
+# TODO post-v1.0: amd      — implement ROCm path in resources/linux.py using pyrsmi
+#                            https://github.com/RadeonOpenCompute/pyrsmi
+# TODO post-v1.0: intel    — implement Arc path using level-zero Python bindings
+#                            https://github.com/intel/level-zero
+# TODO post-v1.0: qualcomm — implement Snapdragon X NPU monitoring via Windows ML / QNN SDK
+#                            https://www.qualcomm.com/developer/software/qualcomm-ai-engine-direct-sdk
+# TODO post-v1.0: directml — implement DirectX 12 VRAM fallback for any Windows GPU vendor
+#                            via pydirectml or WMI Win32_VideoController queries
 nvidia   = ["pynvml>=11.5"]
-amd      = []   # stub — pyrsmi not yet integrated; see TODO v0.2 above
-intel    = []   # stub — level-zero not yet integrated; see TODO v0.2 above
-qualcomm = []   # stub — Snapdragon X NPU (Windows Copilot+ PCs); see TODO v0.3 above
-directml = []   # stub — DirectX 12 GPU fallback for Windows (any vendor); see TODO v0.3 above
+amd      = []   # stub — pyrsmi not yet integrated; see TODO post-v1.0 above
+intel    = []   # stub — level-zero not yet integrated; see TODO post-v1.0 above
+qualcomm = []   # stub — Snapdragon X NPU (Windows Copilot+ PCs); see TODO post-v1.0 above
+directml = []   # stub — DirectX 12 GPU fallback for Windows (any vendor); see TODO post-v1.0 above
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.23",
@@ -131,11 +132,11 @@ omit = [
     "llm_valet/resources/macos.py",
     "llm_valet/resources/linux.py",
     "llm_valet/resources/windows.py",
-    # Require a live Ollama instance — covered by integration tests (TODO v0.2)
+    # Require a live Ollama instance — covered by integration tests (TODO v1.0)
     "llm_valet/providers/ollama.py",
-    # FastAPI app wiring — covered by integration tests (TODO v0.2)
+    # FastAPI app wiring — covered by integration tests (TODO v1.0)
     "llm_valet/api.py",
-    # Watchdog loop — requires async integration harness (TODO v0.2)
+    # Watchdog loop — requires async integration harness (TODO v1.0)
     "llm_valet/watchdog.py",
 ]
 

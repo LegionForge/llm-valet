@@ -160,8 +160,41 @@ def _apply_yaml(settings: Settings, raw: dict[str, Any]) -> None:
 
     if "thresholds" in raw and isinstance(raw["thresholds"], dict):
         allowed = set(ResourceThresholds.__dataclass_fields__)
+        _PCT_FIELDS = {"ram_pause_pct", "ram_resume_pct", "cpu_pause_pct", "gpu_vram_pause_pct"}
+        candidate: dict[str, object] = {}
         for key, value in raw["thresholds"].items():
-            if key in allowed:
+            if key not in allowed:
+                continue
+            if key in _PCT_FIELDS:
+                try:
+                    v = float(value)  # type: ignore[arg-type]
+                except (TypeError, ValueError):
+                    logger.warning("invalid threshold value ignored", extra={"key": key, "value": value})
+                    continue
+                if not (0.0 < v <= 100.0):
+                    logger.warning(
+                        "threshold out of range (0–100) ignored",
+                        extra={"key": key, "value": value},
+                    )
+                    continue
+            if key == "check_interval_seconds":
+                if not isinstance(value, int) or value < 1:
+                    logger.warning(
+                        "check_interval_seconds must be an integer >= 1 — ignored",
+                        extra={"value": value},
+                    )
+                    continue
+            candidate[key] = value
+        # Validate hysteresis invariant on the merged candidate before applying
+        merged_pause = float(candidate.get("ram_pause_pct", settings.thresholds.ram_pause_pct))
+        merged_resume = float(candidate.get("ram_resume_pct", settings.thresholds.ram_resume_pct))
+        if merged_resume >= merged_pause:
+            logger.warning(
+                "config.yaml: ram_resume_pct >= ram_pause_pct — threshold block ignored",
+                extra={"ram_resume_pct": merged_resume, "ram_pause_pct": merged_pause},
+            )
+        else:
+            for key, value in candidate.items():
                 setattr(settings.thresholds, key, value)
 
 
@@ -169,7 +202,14 @@ def _apply_env_overrides(settings: Settings) -> None:
     if val := os.environ.get("LLM_VALET_HOST"):
         settings.host = val
     if val := os.environ.get("LLM_VALET_PORT"):
-        settings.port = int(val)
+        try:
+            settings.port = int(val)
+        except ValueError:
+            logger.warning(
+                "LLM_VALET_PORT is not a valid integer — using default %d",
+                settings.port,
+                extra={"value": val},
+            )
     if val := os.environ.get("LLM_VALET_API_KEY"):
         settings.api_key = val
     if val := os.environ.get("LLM_VALET_PROVIDER"):

@@ -70,7 +70,10 @@ class OllamaProvider(LLMProvider):
             async with httpx.AsyncClient(timeout=self._timeout) as client:
                 resp = await client.post(
                     f"{self._base_url}/api/generate",
-                    json={"model": model, "keep_alive": 0},
+                    # stream=False required: without it Ollama sends a chunked response
+                    # and resp.json() only parses the first chunk, so done_reason=="unload"
+                    # is never seen and pause() silently returns False.
+                    json={"model": model, "keep_alive": 0, "stream": False},
                 )
                 resp.raise_for_status()
                 data = resp.json()

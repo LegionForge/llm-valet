@@ -66,6 +66,46 @@ class TestApplyYaml:
         _apply_yaml(s, {"api_key": "test-secret"})
         assert s.api_key == "test-secret"
 
+    # M1 — threshold validation in YAML load path
+
+    def test_threshold_pct_above_100_ignored(self) -> None:
+        s = Settings()
+        _apply_yaml(s, {"thresholds": {"ram_pause_pct": 150}})
+        assert s.thresholds.ram_pause_pct == 85.0  # default unchanged
+
+    def test_threshold_pct_zero_ignored(self) -> None:
+        s = Settings()
+        _apply_yaml(s, {"thresholds": {"ram_pause_pct": 0}})
+        assert s.thresholds.ram_pause_pct == 85.0
+
+    def test_threshold_pct_non_numeric_ignored(self) -> None:
+        s = Settings()
+        _apply_yaml(s, {"thresholds": {"ram_pause_pct": "high"}})
+        assert s.thresholds.ram_pause_pct == 85.0
+
+    def test_threshold_check_interval_zero_ignored(self) -> None:
+        s = Settings()
+        _apply_yaml(s, {"thresholds": {"check_interval_seconds": 0}})
+        assert s.thresholds.check_interval_seconds == 10  # default unchanged
+
+    def test_threshold_check_interval_negative_ignored(self) -> None:
+        s = Settings()
+        _apply_yaml(s, {"thresholds": {"check_interval_seconds": -5}})
+        assert s.thresholds.check_interval_seconds == 10
+
+    def test_threshold_inverted_hysteresis_block_ignored(self) -> None:
+        """ram_resume_pct >= ram_pause_pct must cause the entire threshold block to be skipped."""
+        s = Settings()
+        _apply_yaml(s, {"thresholds": {"ram_pause_pct": 70.0, "ram_resume_pct": 80.0}})
+        assert s.thresholds.ram_pause_pct == 85.0
+        assert s.thresholds.ram_resume_pct == 60.0
+
+    def test_threshold_valid_block_applied(self) -> None:
+        s = Settings()
+        _apply_yaml(s, {"thresholds": {"ram_pause_pct": 90.0, "ram_resume_pct": 65.0}})
+        assert s.thresholds.ram_pause_pct == 90.0
+        assert s.thresholds.ram_resume_pct == 65.0
+
 
 # ── _apply_env_overrides ───────────────────────────────────────────────────────
 
@@ -110,6 +150,13 @@ class TestApplyEnvOverrides:
         _apply_yaml(s, {"api_key": "yaml-value"})
         _apply_env_overrides(s)
         assert s.api_key == "env-wins"
+
+    def test_invalid_port_env_var_keeps_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """M2 — non-numeric LLM_VALET_PORT must not crash; default port is preserved."""
+        monkeypatch.setenv("LLM_VALET_PORT", "auto")
+        s = Settings()
+        _apply_env_overrides(s)
+        assert s.port == 8765
 
 
 # ── Settings defaults ──────────────────────────────────────────────────────────
