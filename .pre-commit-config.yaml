@@ -34,6 +34,7 @@ repos:
     rev: v1.10.0
     hooks:
       - id: mypy
+        files: ^(llm_valet|svcmgr)/
         additional_dependencies:
           - types-PyYAML
           - pyyaml
