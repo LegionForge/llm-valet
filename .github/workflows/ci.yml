@@ -114,8 +114,10 @@ jobs:
 
       - name: pip-audit
         run: |
-          pip install pip-audit
-          python -m pip_audit
+          pip install --upgrade pip pip-audit
+          # CVE-2026-3219 affects pip itself (the runner tool), not a runtime dep of llm-valet.
+          # Ignored here; tracked in project security log. Remove once pip ships a fix.
+          python -m pip_audit --ignore-vuln CVE-2026-3219
 
   codeql:
     name: CodeQL

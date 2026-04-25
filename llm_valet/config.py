@@ -161,13 +161,13 @@ def _apply_yaml(settings: Settings, raw: dict[str, Any]) -> None:
     if "thresholds" in raw and isinstance(raw["thresholds"], dict):
         allowed = set(ResourceThresholds.__dataclass_fields__)
         _PCT_FIELDS = {"ram_pause_pct", "ram_resume_pct", "cpu_pause_pct", "gpu_vram_pause_pct"}
-        candidate: dict[str, object] = {}
+        candidate: dict[str, Any] = {}
         for key, value in raw["thresholds"].items():
             if key not in allowed:
                 continue
             if key in _PCT_FIELDS:
                 try:
-                    v = float(value)  # type: ignore[arg-type]
+                    v = float(value)
                 except (TypeError, ValueError):
                     logger.warning(
                         "invalid threshold value ignored", extra={"key": key, "value": value}
