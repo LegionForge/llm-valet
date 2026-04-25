@@ -1,6 +1,6 @@
 # llm-valet — Roadmap
 
-Last updated: 2026-04-23 (v0.5.5 released)
+Last updated: 2026-04-24 (pre-v0.6.0 review complete)
 
 ---
 
@@ -23,7 +23,7 @@ Fully functional on macOS (Apple Silicon + Intel) with Ollama as the provider.
 | Overcommit detection at startup | ✅ |
 | macOS service manager (launchctl, both Ollama variants) | ✅ |
 | Security: T1–T8 threat model implemented | ✅ |
-| Unit test suite: 364 tests, 98% coverage | ✅ |
+| Unit test suite: 372 tests, 98% coverage | ✅ |
 | Linux / Windows resource collectors | ✅ (untested on hardware) |
 | Linux / Windows service managers | ✅ (untested on hardware) |
 
@@ -35,8 +35,8 @@ Fully functional on macOS (Apple Silicon + Intel) with Ollama as the provider.
 
 | Item | Notes |
 |---|---|
-| Pre-v0.6.0 code review complete | In progress |
-| Bug fixes from review (B1–B2, M1–M3, L1–L4) | See review findings |
+| Pre-v0.6.0 code review complete | ✅ All findings resolved |
+| Bug fixes from review (B1–B2, M1–M3, L1–L4) | ✅ Commits 8abbac4, df17f29, d8a42a5 |
 | Integration test harness for api.py, watchdog.py, ollama.py | Requires live Ollama instance |
 | README complete — install, configure, operate | — |
 | GitHub Wiki: Architecture + Module reference | — |
