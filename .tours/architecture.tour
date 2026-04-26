@@ -1,0 +1,79 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "Architecture Overview",
+  "description": "A guided walk through llm-valet's two parallel abstractions — resources (machine monitoring) and providers (LLM serving) — and how they meet in the watchdog and API.",
+  "steps": [
+    {
+      "file": "llm_valet/resources/base.py",
+      "line": 57,
+      "title": "1 · Two parallel abstractions",
+      "description": "The whole system is built on two symmetric ABCs.\n\n`ResourceCollector` (here) monitors the machine — RAM, CPU, GPU, disk. `LLMProvider` (in `providers/base.py`) controls the LLM service — pause, resume, start, stop.\n\nNeither depends on the other. The watchdog wires them together. This symmetry means you can swap a platform collector or a provider implementation without touching any other layer."
+    },
+    {
+      "file": "llm_valet/resources/base.py",
+      "line": 10,
+      "title": "2 · Metric dataclasses",
+      "description": "`PressureLevel` + the four metric dataclasses (`MemoryMetrics`, `CPUMetrics`, `GPUMetrics`, `DiskMetrics`) are the currency of the system — every decision downstream is made from a single `SystemMetrics` snapshot.\n\nAll fields that can be absent on a given platform are typed `... | None`. Callers check `supported_metrics()` before trusting those fields."
+    },
+    {
+      "file": "llm_valet/resources/base.py",
+      "line": 99,
+      "title": "3 · ThresholdEngine: pure logic, no I/O",
+      "description": "`ThresholdEngine` is stateless — it takes `SystemMetrics` + `ResourceThresholds` and returns `(should_pause: bool, reason: str)`. No network calls, no filesystem reads, no psutil.\n\nThis makes it trivially unit-testable: pass in a crafted `SystemMetrics`, assert the decision. The watchdog owns all state (counters, timers); `ThresholdEngine` just evaluates the instantaneous snapshot."
+    },
+    {
+      "file": "llm_valet/resources/base.py",
+      "line": 124,
+      "title": "4 · Apple Silicon: why memory_pressure is NOT a trigger",
+      "description": "On Apple Silicon, loading a large model into unified memory routinely causes transient `CRITICAL` pressure readings — even when RAM% is within the user's configured threshold. If we used `memory_pressure CRITICAL` as an independent pause trigger, every model load would immediately pause the service.\n\nSo `PressureLevel` is reported in `/metrics` for informational purposes only. `ram_pause_pct` (from config) is the authoritative trigger. This is the most counter-intuitive design decision in the codebase."
+    },
+    {
+      "file": "llm_valet/providers/base.py",
+      "line": 24,
+      "title": "5 · LLMProvider: the other half",
+      "description": "`LLMProvider` is the contract every provider implementation must satisfy.\n\nThe critical distinction between `pause`/`resume` and `start`/`stop`: **pause** unloads the model from memory but leaves the service running (fast — seconds). **stop** shuts the service down entirely (slow — 30–90s to come back). The watchdog only ever calls `pause`/`resume`; `start`/`stop` are reserved for the API's manual control surface.\n\nOllama v1.0 is the only concrete implementation. `LM Studio`, `vLLM`, and `MLX` are post-v1.0 parked features."
+    },
+    {
+      "file": "llm_valet/watchdog.py",
+      "line": 14,
+      "title": "6 · FSM: five states",
+      "description": "The watchdog is a five-state machine:\n\n```\nRUNNING → PAUSING → PAUSED → RESUMING → RUNNING\n                ↕\n          PROVIDER_DOWN\n```\n\n`PAUSING` and `RESUMING` are intra-tick transient states — they exist only while the provider call is in-flight. `PROVIDER_DOWN` handles unexpected Ollama crashes so the FSM doesn't stay stuck at `RUNNING` when the service exits."
+    },
+    {
+      "file": "llm_valet/watchdog.py",
+      "line": 34,
+      "title": "7 · Watchdog constructor: composed, not coupled",
+      "description": "The watchdog receives a `LLMProvider` and a `ResourceCollector` by injection. It never calls `psutil` directly for resource data, and it never imports a concrete provider.\n\nThis keeps the watchdog testable: swap in mock implementations and assert state transitions without touching the OS or a real Ollama instance. `ThresholdEngine` is constructed internally because it's pure logic with no external surface."
+    },
+    {
+      "file": "llm_valet/watchdog.py",
+      "line": 78,
+      "title": "8 · Manual pause sync — why this exists",
+      "description": "`notify_manual_pause()` and `notify_manual_resume()` are called by the API after a successful `/pause` or `/resume` request.\n\nWithout these, the FSM and the provider are out of sync: the user manually pauses, but the watchdog still thinks the state is `RUNNING` and will try to pause again on the next tick — or worse, immediately resume because resources look fine.\n\nThe API writes the outcome; the watchdog syncs its view to match. This is the handshake that keeps both state machines coherent."
+    },
+    {
+      "file": "llm_valet/watchdog.py",
+      "line": 101,
+      "title": "9 · The tick: where everything meets",
+      "description": "Every `check_interval_seconds`, `_tick()` runs this sequence:\n\n1. Health-probe the provider — detect unexpected crashes → `PROVIDER_DOWN`\n2. `collector.collect()` → `SystemMetrics`\n3. `_detect_game()` → scan psutil for `steamapps/common` processes\n4. `ThresholdEngine.evaluate(metrics)` → `(resource_pressure, reason)`\n5. Accumulate CPU ticks for the sustained-seconds window\n6. Resolve `should_pause` — game OR (resource pressure AND not CPU-only-or-sustained)\n7. If `RUNNING` and `should_pause` → `_transition_to_paused()`\n8. If `PAUSED` and not `should_pause` → check grace period → `_transition_to_running()`"
+    },
+    {
+      "file": "llm_valet/api.py",
+      "line": 191,
+      "title": "10 · Security middleware: order matters",
+      "description": "Three middleware layers are stacked in this order:\n\n1. **TrustedHostMiddleware** (T2 — DNS rebinding) — rejects any `Host` header not in the allowlist. Must be outermost so a rebinding attack is stopped before the request reaches any handler.\n2. **Body size limit** (64 KB) — drops oversized requests before JSON parsing. `Content-Length` alone is insufficient because chunked transfer omits it; the middleware drains and buffers the stream.\n3. **CORSMiddleware** (T3) — `allow_origins` is empty by default; never `\"*\"`. Cross-origin JS cannot reach the API unless an explicit origin is added in config.\n\nMiddleware in FastAPI/Starlette executes in reverse registration order (last-added runs first on request). `TrustedHostMiddleware` must be added first so it executes last on the way in — closest to the network."
+    },
+    {
+      "file": "llm_valet/api.py",
+      "line": 263,
+      "title": "11 · Auth: localhost exempt, LAN requires key",
+      "description": "`require_api_key` is injected as a FastAPI dependency on every mutating endpoint.\n\nRequests from `127.0.0.1` or `::1` bypass the key check entirely — if you're local, you're trusted. Any other source (LAN, VPN) must supply a valid `X-API-Key`. If `api_key` is not set in config and the host is bound to `0.0.0.0`, all LAN requests get 403 rather than silently passing.\n\nThis mirrors the default bind: `127.0.0.1` is safe without auth; `0.0.0.0` is opt-in and requires a key."
+    },
+    {
+      "file": "llm_valet/static/index.html",
+      "line": 1083,
+      "title": "12 · WebUI: textContent, never innerHTML",
+      "description": "All dynamic data from the API is written via `element.textContent`, never `element.innerHTML`. This is the T5 (XSS) mitigation.\n\n`innerHTML` interprets the string as HTML — if any API field ever contains `<script>` or an event handler, it executes. `textContent` treats the string as literal text and escapes it automatically.\n\nThe one exception is the resource bar segments, which are built with `document.createElement()` + `appendChild()` — DOM construction rather than HTML string concatenation. Same guarantee, different mechanism."
+    }
+  ]
+}
