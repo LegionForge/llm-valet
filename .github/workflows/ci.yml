@@ -6,135 +6,36 @@ on:
   pull_request:
     branches: [main]
 
-# ── Reusable workflows from LegionForge/dev-rig ───────────────────────────────
-# When dev-rig is published to GitHub, replace the inline jobs below with:
-#
-#   jobs:
-#     lint:
-#       uses: LegionForge/dev-rig/.github/workflows/lint.yml@main
-#       with:
-#         source-dirs: "llm_valet svcmgr"
-#
-#     test:
-#       uses: LegionForge/dev-rig/.github/workflows/test.yml@main
-#       with:
-#         coverage-source: "llm_valet"
-#         coverage-threshold: 80
-#
-#     sast:
-#       uses: LegionForge/dev-rig/.github/workflows/sast.yml@main
-#       with:
-#         source-dirs: "llm_valet/"
-#       permissions:
-#         security-events: write
-#
-#     audit:
-#       uses: LegionForge/dev-rig/.github/workflows/audit.yml@main
-#
-# ─────────────────────────────────────────────────────────────────────────────
-# Until then, the equivalent inline jobs run below.
-
 jobs:
   lint:
-    name: Lint & Type Check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-
-      - name: Install dev dependencies
-        run: pip install -e ".[dev]" types-PyYAML
-
-      - name: Ruff
-        run: python -m ruff check llm_valet svcmgr
-
-      - name: Bandit
-        run: python -m bandit -r llm_valet svcmgr -c pyproject.toml
-
-      - name: mypy
-        run: python -m mypy llm_valet svcmgr
+    uses: LegionForge/dev-rig/.github/workflows/lint.yml@main
+    with:
+      source-dirs: "llm_valet svcmgr"
 
   test:
-    name: Tests & Coverage
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+    uses: LegionForge/dev-rig/.github/workflows/test.yml@main
+    with:
+      coverage-source: "llm_valet"
+      coverage-threshold: 80
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-
-      - name: Install dev dependencies
-        run: pip install -e ".[dev]" types-PyYAML
-
-      - name: pytest with coverage
-        run: python -m pytest --cov=llm_valet --cov-report=term-missing --cov-report=xml --cov-fail-under=80
-
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: coverage-xml
-          path: coverage.xml
-
-  semgrep:
-    name: Semgrep SAST
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install semgrep
-        run: pip install semgrep
-
-      - name: Semgrep — python + fastapi rulesets
-        run: semgrep --config=p/python --config=p/fastapi llm_valet/ --error
-
-  audit:
-    name: Dependency Audit
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-
-      - name: Install project
-        run: pip install -e "."
-
-      - name: pip-audit
-        run: |
-          pip install --upgrade pip pip-audit
-          # CVE-2026-3219 affects pip itself (the runner tool), not a runtime dep of llm-valet.
-          # Ignored here; tracked in project security log. Remove once pip ships a fix.
-          python -m pip_audit --ignore-vuln CVE-2026-3219
-
-  codeql:
-    name: CodeQL
-    runs-on: ubuntu-latest
+  sast:
+    uses: LegionForge/dev-rig/.github/workflows/sast.yml@main
+    with:
+      source-dirs: "llm_valet/"
     permissions:
       security-events: write
-    steps:
-      - uses: actions/checkout@v4
 
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
-        with:
-          languages: python
-          queries: security-extended
+  audit:
+    uses: LegionForge/dev-rig/.github/workflows/audit.yml@main
+    with:
+      # CVE-2026-3219 affects pip itself (the runner tool), not a runtime dep of llm-valet.
+      # Remove once pip ships a fix.
+      ignore-vulns: "CVE-2026-3219"
 
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
+  secrets:
+    uses: LegionForge/dev-rig/.github/workflows/secrets.yml@main
+    permissions:
+      contents: read
 
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+  sbom:
+    uses: LegionForge/dev-rig/.github/workflows/sbom.yml@main
