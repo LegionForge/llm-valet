@@ -1,0 +1,12 @@
+title = "llm-valet gitleaks config"
+
+[allowlist]
+description = "known-safe findings"
+
+# v0.2 test-rig API key committed in docs/testing/v0.2-mac-mini.md.
+# Key has been rotated; current file updated to use <api-key> placeholder.
+# Historical commit cannot be rewritten without force-pushing published history.
+commits = ["a2be3054ba5d39d11114f82a36b898f8bd1552f4"]
+
+# Intentional wrong-key fixture in tests/exploratory/run_exploratory.sh (E3b test).
+regexes = ["invalid-key-for-testing"]
