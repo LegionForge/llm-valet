@@ -8,38 +8,38 @@ on:
 
 # dev-rig SHA — bump this intentionally when upgrading shared workflows.
 # Pinned so accidental changes in dev-rig never silently affect this repo.
-# Current: 8a10629 feat(audit): add ignore-vulns input to suppress specific CVEs
+# Current: 00b47d5 fix(ci): sbom stdout redirect + gitleaks CLI (no license required)
 
 jobs:
   lint:
-    uses: LegionForge/dev-rig/.github/workflows/lint.yml@8a10629
+    uses: LegionForge/dev-rig/.github/workflows/lint.yml@00b47d5d92646b03728d93138dc93d15638dc768
     with:
       source-dirs: "llm_valet svcmgr"
 
   test:
-    uses: LegionForge/dev-rig/.github/workflows/test.yml@8a10629
+    uses: LegionForge/dev-rig/.github/workflows/test.yml@00b47d5d92646b03728d93138dc93d15638dc768
     with:
       coverage-source: "llm_valet"
       coverage-threshold: 80
 
   sast:
-    uses: LegionForge/dev-rig/.github/workflows/sast.yml@8a10629
+    uses: LegionForge/dev-rig/.github/workflows/sast.yml@00b47d5d92646b03728d93138dc93d15638dc768
     with:
       source-dirs: "llm_valet/"
     permissions:
       security-events: write
 
   audit:
-    uses: LegionForge/dev-rig/.github/workflows/audit.yml@8a10629
+    uses: LegionForge/dev-rig/.github/workflows/audit.yml@00b47d5d92646b03728d93138dc93d15638dc768
     with:
       # CVE-2026-3219 affects pip itself (the runner tool), not a runtime dep of llm-valet.
       # Remove once pip ships a fix.
       ignore-vulns: "CVE-2026-3219"
 
   secrets:
-    uses: LegionForge/dev-rig/.github/workflows/secrets.yml@8a10629
+    uses: LegionForge/dev-rig/.github/workflows/secrets.yml@00b47d5d92646b03728d93138dc93d15638dc768
     permissions:
       contents: read
 
   sbom:
-    uses: LegionForge/dev-rig/.github/workflows/sbom.yml@8a10629
+    uses: LegionForge/dev-rig/.github/workflows/sbom.yml@00b47d5d92646b03728d93138dc93d15638dc768
