@@ -7,13 +7,13 @@
       "file": "llm_valet/resources/base.py",
       "line": 57,
       "title": "1 · Two parallel abstractions",
-      "description": "The whole system is built on two symmetric ABCs.\n\n`ResourceCollector` (here) monitors the machine — RAM, CPU, GPU, disk. `LLMProvider` (in `providers/base.py`) controls the LLM service — pause, resume, start, stop.\n\nNeither depends on the other. The watchdog wires them together. This symmetry means you can swap a platform collector or a provider implementation without touching any other layer."
+      "description": "The whole system is built on two symmetric [Abstract Base Classes](https://docs.python.org/3/library/abc.html): `ResourceCollector` and `LLMProvider`.\n\n`ResourceCollector` (here) monitors the machine — RAM, CPU, GPU, disk.\n\n`LLMProvider` (in `providers/base.py`) is the abstraction layer for local LLM serving software. Any provider that can be paused, resumed, started, and stopped can be implemented as a concrete subclass — Ollama ships in v1.0, with LM Studio, vLLM, exo, KoboldCPP, and others as natural future targets. The rest of the system (watchdog, API) only ever calls the `LLMProvider` interface, so swapping or adding a provider requires no changes outside its own file.\n\nNeither ABC depends on the other. The watchdog wires them together."
     },
     {
       "file": "llm_valet/resources/base.py",
       "line": 10,
       "title": "2 · Metric dataclasses",
-      "description": "`PressureLevel` + the four metric dataclasses (`MemoryMetrics`, `CPUMetrics`, `GPUMetrics`, `DiskMetrics`) are the currency of the system — every decision downstream is made from a single `SystemMetrics` snapshot.\n\nAll fields that can be absent on a given platform are typed `... | None`. Callers check `supported_metrics()` before trusting those fields."
+      "description": "`PressureLevel` + the four metric dataclasses (`MemoryMetrics`, `CPUMetrics`, `GPUMetrics`, `DiskMetrics`) are the currency of the system — every decision downstream is made from a single `SystemMetrics` snapshot.\n\n**Occupancy vs. demand — why both exist**\n\n`used_pct` measures *occupancy*: how much of the RAM pool is in use. `PressureLevel` measures *demand*: whether processes are actively competing for memory the OS can't readily supply. These are not the same thing, and on macOS they frequently diverge. The OS deliberately fills RAM with file caches and pre-warmed apps — 90% occupancy can coexist with `NORMAL` pressure because nothing is actually contesting that memory. Pressure only rises when the OS has to make a painful tradeoff: compress pages, evict a cache, or delay an allocation. On Apple Silicon the distinction matters even more, because CPU and GPU draw from the same unified pool — pressure reflects demand across both.\n\n**Cross-platform grounding**\n\n- **macOS**: native kernel API (`memory_pressure` CLI), reports `normal / warn / critical` directly.\n- **Linux**: PSI (Pressure Stall Information, `/proc/pressure/memory`) measures how long tasks stall waiting for memory — the closest Linux equivalent, though availability varies by kernel version.\n- **Windows**: no native demand signal. `PressureLevel` is derived from `used_pct` thresholds in `_pressure_from_pct()` (`resources/windows.py`): `< 75%` → `NORMAL`, `≥ 75%` → `WARN`, `≥ 90%` → `CRITICAL`. These are currently hardcoded and independent of the user's `ram_pause_pct` config — a future Windows implementation pass should make them user-adjustable to match the config-driven approach on other platforms.\n\n**Optional fields**\n\nSome metrics simply don't exist on every machine. `GPUMetrics` fields like `vram_used_mb` and `compute_pct` are typed `int | None` or `float | None` — Python's notation for \"this value may be absent.\" On a machine with no accessible GPU driver, those fields are `None` rather than a misleading zero. Callers check `supported_metrics()` first to know which fields are safe to use."
     },
     {
       "file": "llm_valet/resources/base.py",
@@ -71,7 +71,7 @@
     },
     {
       "file": "llm_valet/static/index.html",
-      "line": 1083,
+      "line": 1774,
       "title": "12 · WebUI: textContent, never innerHTML",
       "description": "All dynamic data from the API is written via `element.textContent`, never `element.innerHTML`. This is the T5 (XSS) mitigation.\n\n`innerHTML` interprets the string as HTML — if any API field ever contains `<script>` or an event handler, it executes. `textContent` treats the string as literal text and escapes it automatically.\n\nThe one exception is the resource bar segments, which are built with `document.createElement()` + `appendChild()` — DOM construction rather than HTML string concatenation. Same guarantee, different mechanism."
     }
