@@ -8,6 +8,7 @@ Handles two Ollama install variants:
 Detection order: App first, then Brew CLI plist.
 All subprocess calls use shell=False with explicit argument lists.
 """
+
 import logging
 import subprocess
 from pathlib import Path
@@ -16,20 +17,22 @@ logger = logging.getLogger(__name__)
 
 # ── Ollama install paths ──────────────────────────────────────────────────────
 
-_APP_BUNDLE     = Path("/Applications/Ollama.app")
+_APP_BUNDLE = Path("/Applications/Ollama.app")
 _APP_EXECUTABLE = _APP_BUNDLE / "Contents/MacOS/Ollama"
 
 # Brew formula plist names — older versions used com.ollama.ollama, newer
 # homebrew formula uses homebrew.mxcl.ollama.  Check both.
 _BREW_VARIANTS = [
-    ("homebrew.mxcl.ollama",
-     Path("~/Library/LaunchAgents/homebrew.mxcl.ollama.plist").expanduser()),
-    ("com.ollama.ollama",
-     Path("~/Library/LaunchAgents/com.ollama.ollama.plist").expanduser()),
+    (
+        "homebrew.mxcl.ollama",
+        Path("~/Library/LaunchAgents/homebrew.mxcl.ollama.plist").expanduser(),
+    ),
+    ("com.ollama.ollama", Path("~/Library/LaunchAgents/com.ollama.ollama.plist").expanduser()),
 ]
 
 
 # ── Public interface ──────────────────────────────────────────────────────────
+
 
 def start_service() -> bool:
     """Start Ollama via the appropriate mechanism for the installed variant."""
@@ -68,6 +71,7 @@ def is_installed() -> bool:
 
 # ── Variant detection ─────────────────────────────────────────────────────────
 
+
 def _brew_plist() -> tuple[str, Path]:
     """Return (label, plist_path) for whichever brew plist variant is present."""
     for label, plist in _BREW_VARIANTS:
@@ -88,6 +92,7 @@ def _detect_variant() -> str | None:
 
 
 # ── App variant (menu-bar app) ────────────────────────────────────────────────
+
 
 def _open_app() -> bool:
     """Launch Ollama.app via `open -a`."""
@@ -154,6 +159,7 @@ def _terminate_app_executable() -> bool:
 
 
 # ── Brew CLI variant (launchctl) ──────────────────────────────────────────────
+
 
 def _launchctl(action: str, label: str, plist: Path | None = None) -> bool:
     """

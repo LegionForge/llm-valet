@@ -6,6 +6,7 @@ Metrics:
   Memory pressure — derived from psutil thresholds (no OS pressure API on Linux)
   GPU VRAM    — pynvml (NVIDIA) if available; /sys/class/drm fallback for AMD
 """
+
 import logging
 
 import psutil
@@ -23,7 +24,6 @@ logger = logging.getLogger(__name__)
 
 
 class LinuxResourceCollector(ResourceCollector):
-
     def collect(self) -> SystemMetrics:
         return SystemMetrics(
             memory=self._collect_memory(),
@@ -76,15 +76,17 @@ class LinuxResourceCollector(ResourceCollector):
 
 # ── GPU helpers ───────────────────────────────────────────────────────────────
 
+
 def _try_nvidia() -> GPUMetrics | None:
     try:
         import pynvml  # optional dependency
+
         pynvml.nvmlInit()
         handle = pynvml.nvmlDeviceGetHandleByIndex(0)
         mem = pynvml.nvmlDeviceGetMemoryInfo(handle)
         util = pynvml.nvmlDeviceGetUtilizationRates(handle)
         total_mb = mem.total // (1024 * 1024)
-        used_mb  = mem.used  // (1024 * 1024)
+        used_mb = mem.used // (1024 * 1024)
         return GPUMetrics(
             available=True,
             vram_total_mb=total_mb,
@@ -107,16 +109,16 @@ def _try_amd_sysfs() -> GPUMetrics | None:
     from pathlib import Path
 
     total_path = Path("/sys/class/drm/card0/device/mem_info_vram_total")
-    used_path  = Path("/sys/class/drm/card0/device/mem_info_vram_used")
+    used_path = Path("/sys/class/drm/card0/device/mem_info_vram_used")
 
     if not total_path.is_file() or not used_path.is_file():
         return None
 
     try:
         total_bytes = int(total_path.read_text().strip())
-        used_bytes  = int(used_path.read_text().strip())
+        used_bytes = int(used_path.read_text().strip())
         total_mb = total_bytes // (1024 * 1024)
-        used_mb  = used_bytes  // (1024 * 1024)
+        used_mb = used_bytes // (1024 * 1024)
         return GPUMetrics(
             available=True,
             vram_total_mb=total_mb,

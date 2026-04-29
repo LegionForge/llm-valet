@@ -444,6 +444,7 @@ class OllamaProvider(LLMProvider):
 
 # ── Platform service manager shims ───────────────────────────────────────────
 
+
 def _svcmgr_start() -> bool:
     """Start Ollama via the platform service manager. Returns True on success."""
     _mod = _svcmgr_module()
@@ -480,12 +481,15 @@ def _svcmgr_module() -> types.ModuleType | None:
     try:
         if sys.platform == "darwin":
             import svcmgr.macos as _m
+
             return _m
         if sys.platform == "linux":
             import svcmgr.linux as _m
+
             return _m
         if sys.platform == "win32":
             import svcmgr.windows as _m
+
             return _m
     except ImportError as exc:
         logger.warning("svcmgr module import failed", extra={"error": str(exc)})

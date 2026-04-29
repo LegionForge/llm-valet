@@ -6,6 +6,7 @@ Metrics:
   Memory pressure — derived from psutil thresholds
   GPU VRAM    — pynvml (NVIDIA) if available; WMI fallback
 """
+
 import logging
 
 import psutil
@@ -23,7 +24,6 @@ logger = logging.getLogger(__name__)
 
 
 class WindowsResourceCollector(ResourceCollector):
-
     def collect(self) -> SystemMetrics:
         return SystemMetrics(
             memory=self._collect_memory(),
@@ -74,15 +74,17 @@ class WindowsResourceCollector(ResourceCollector):
 
 # ── GPU helpers ───────────────────────────────────────────────────────────────
 
+
 def _try_nvidia() -> GPUMetrics | None:
     try:
         import pynvml
+
         pynvml.nvmlInit()
         handle = pynvml.nvmlDeviceGetHandleByIndex(0)
-        mem  = pynvml.nvmlDeviceGetMemoryInfo(handle)
+        mem = pynvml.nvmlDeviceGetMemoryInfo(handle)
         util = pynvml.nvmlDeviceGetUtilizationRates(handle)
         total_mb = mem.total // (1024 * 1024)
-        used_mb  = mem.used  // (1024 * 1024)
+        used_mb = mem.used // (1024 * 1024)
         return GPUMetrics(
             available=True,
             vram_total_mb=total_mb,
@@ -104,6 +106,7 @@ def _try_wmi() -> GPUMetrics | None:
     """
     try:
         import wmi  # optional — install with: pip install wmi
+
         w = wmi.WMI()
         controllers = w.Win32_VideoController()
         if not controllers:
@@ -124,7 +127,7 @@ def _try_wmi() -> GPUMetrics | None:
         return GPUMetrics(
             available=True,
             vram_total_mb=total_mb,
-            vram_used_mb=None,     # WMI does not expose used VRAM
+            vram_used_mb=None,  # WMI does not expose used VRAM
             vram_used_pct=None,
             compute_pct=None,
         )

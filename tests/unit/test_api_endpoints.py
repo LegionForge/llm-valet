@@ -6,6 +6,7 @@ _configure_logging so create_app() runs without any real services. The
 TestClient handles the FastAPI lifespan (starts/stops the watchdog task).
 A 300-second check_interval keeps the watchdog from ticking during tests.
 """
+
 from __future__ import annotations
 
 import threading
@@ -28,8 +29,8 @@ from llm_valet.resources.base import (
 )
 from llm_valet.watchdog import WatchdogState
 
-
 # ── Factories ─────────────────────────────────────────────────────────────────
+
 
 def _make_metrics(ram_pct: float = 50.0) -> SystemMetrics:
     return SystemMetrics(
@@ -69,25 +70,27 @@ def _make_provider_status(
 
 def _make_mock_provider(status: ProviderStatus | None = None) -> MagicMock:
     p = MagicMock()
-    p.status   = AsyncMock(return_value=status or _make_provider_status())
-    p.pause    = AsyncMock(return_value=True)
-    p.resume   = AsyncMock(return_value=True)
-    p.stop     = AsyncMock(return_value=True)
-    p.start    = AsyncMock(return_value=True)
-    p.health_check  = AsyncMock(return_value=True)
-    p.list_models   = AsyncMock(return_value=[
-        ModelInfo(name="test:model", size_mb=2000, context_length=32768),
-    ])
-    p.load_model    = AsyncMock(return_value=True)
-    p.delete_model  = AsyncMock(return_value=True)
-    p.pull_model    = AsyncMock(return_value=True)
-    p.force_pause   = AsyncMock(return_value=True)
+    p.status = AsyncMock(return_value=status or _make_provider_status())
+    p.pause = AsyncMock(return_value=True)
+    p.resume = AsyncMock(return_value=True)
+    p.stop = AsyncMock(return_value=True)
+    p.start = AsyncMock(return_value=True)
+    p.health_check = AsyncMock(return_value=True)
+    p.list_models = AsyncMock(
+        return_value=[
+            ModelInfo(name="test:model", size_mb=2000, context_length=32768),
+        ]
+    )
+    p.load_model = AsyncMock(return_value=True)
+    p.delete_model = AsyncMock(return_value=True)
+    p.pull_model = AsyncMock(return_value=True)
+    p.force_pause = AsyncMock(return_value=True)
     return p
 
 
 def _make_mock_collector() -> MagicMock:
     c = MagicMock()
-    c.collect          = MagicMock(return_value=_make_metrics())
+    c.collect = MagicMock(return_value=_make_metrics())
     c.supported_metrics = MagicMock(return_value={"memory", "cpu", "gpu", "disk"})
     return c
 
@@ -146,6 +149,7 @@ class _AuthClient:
 
 # ── Fixture ───────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture()
 def api(request: pytest.FixtureRequest):
     """
@@ -155,12 +159,12 @@ def api(request: pytest.FixtureRequest):
     the auth middleware passes even though TestClient reports client host as
     "testclient" rather than "127.0.0.1".
     """
-    mock_provider  = _make_mock_provider()
+    mock_provider = _make_mock_provider()
     mock_collector = _make_mock_collector()
     settings = _make_test_settings()
 
     with (
-        patch("llm_valet.api._build_provider",  return_value=mock_provider),
+        patch("llm_valet.api._build_provider", return_value=mock_provider),
         patch("llm_valet.api._build_collector", return_value=mock_collector),
         patch("llm_valet.api._check_not_root"),
         patch("llm_valet.api._configure_logging"),
@@ -177,6 +181,7 @@ def api(request: pytest.FixtureRequest):
 
 
 # ── GET /status ───────────────────────────────────────────────────────────────
+
 
 class TestGetStatus:
     def test_returns_200(self, api: tuple) -> None:
@@ -240,9 +245,7 @@ class TestGetStatus:
 
     def test_loaded_context_length_returned(self, api: tuple) -> None:
         client, mock_provider, _ = api
-        mock_provider.status.return_value = _make_provider_status(
-            loaded_context_length=4096
-        )
+        mock_provider.status.return_value = _make_provider_status(loaded_context_length=4096)
         data = client.get("/status").json()
         assert data["provider"]["loaded_context_length"] == 4096
 
@@ -288,6 +291,7 @@ class TestGetStatus:
 
 # ── POST /pause ───────────────────────────────────────────────────────────────
 
+
 class TestPostPause:
     def test_returns_200(self, api: tuple) -> None:
         client, _, _ = api
@@ -322,6 +326,7 @@ class TestPostPause:
 
 # ── POST /resume ──────────────────────────────────────────────────────────────
 
+
 class TestPostResume:
     def test_returns_200(self, api: tuple) -> None:
         client, _, _ = api
@@ -335,7 +340,7 @@ class TestPostResume:
 
     def test_watchdog_running_after_successful_resume(self, api: tuple) -> None:
         client, mock_provider, _ = api
-        mock_provider.pause.return_value  = True
+        mock_provider.pause.return_value = True
         mock_provider.resume.return_value = True
         client.post("/pause")
         client.post("/resume")
@@ -344,6 +349,7 @@ class TestPostResume:
 
 
 # ── POST /stop — non-blocking (BackgroundTasks) ───────────────────────────────
+
 
 class TestPostStop:
     def test_returns_200_immediately(self, api: tuple) -> None:
@@ -361,6 +367,7 @@ class TestPostStop:
 
 # ── POST /start — non-blocking ────────────────────────────────────────────────
 
+
 class TestPostStart:
     def test_returns_200_immediately(self, api: tuple) -> None:
         client, _, _ = api
@@ -375,6 +382,7 @@ class TestPostStart:
 
 # ── POST /restart — non-blocking ──────────────────────────────────────────────
 
+
 class TestPostRestart:
     def test_returns_200_immediately(self, api: tuple) -> None:
         client, _, _ = api
@@ -388,6 +396,7 @@ class TestPostRestart:
 
 
 # ── GET /models ───────────────────────────────────────────────────────────────
+
 
 class TestGetModels:
     def test_returns_200(self, api: tuple) -> None:
@@ -409,6 +418,7 @@ class TestGetModels:
 
 
 # ── POST /load ────────────────────────────────────────────────────────────────
+
 
 class TestPostLoad:
     def test_returns_200(self, api: tuple) -> None:
@@ -454,6 +464,7 @@ class TestPostLoad:
 
 # ── DELETE /models/{name} ─────────────────────────────────────────────────────
 
+
 class TestDeleteModel:
     def test_returns_200(self, api: tuple) -> None:
         client, _, _ = api
@@ -474,6 +485,7 @@ class TestDeleteModel:
 
 # ── POST /models/pull ─────────────────────────────────────────────────────────
 
+
 class TestPullModel:
     def test_returns_200(self, api: tuple) -> None:
         client, _, _ = api
@@ -487,6 +499,7 @@ class TestPullModel:
 
 
 # ── GET /config ───────────────────────────────────────────────────────────────
+
 
 class TestGetConfig:
     def test_returns_200(self, api: tuple) -> None:
@@ -504,6 +517,7 @@ class TestGetConfig:
 
 # ── GET /metrics ──────────────────────────────────────────────────────────────
 
+
 class TestGetMetrics:
     def test_returns_200(self, api: tuple) -> None:
         client, _, _ = api
@@ -519,6 +533,7 @@ class TestGetMetrics:
 
 # ── Authentication ────────────────────────────────────────────────────────────
 
+
 class TestAuth:
     def test_correct_api_key_allowed(self, api: tuple) -> None:
         """_AuthClient injects the correct test key — requests succeed."""
@@ -533,6 +548,7 @@ class TestAuth:
 
 
 # ── POST /pause/force ─────────────────────────────────────────────────────────
+
 
 class TestPostForcePause:
     def test_returns_200(self, api: tuple) -> None:
@@ -577,6 +593,7 @@ class TestPostForcePause:
 
 # ── POST /stop/force — non-blocking ──────────────────────────────────────────
 
+
 class TestPostForceStop:
     def test_returns_200_immediately(self, api: tuple) -> None:
         client, _, _ = api
@@ -590,14 +607,13 @@ class TestPostForceStop:
         assert data["action"] == "force_stop"
 
     def test_wrong_api_key_returns_401(self) -> None:
-
         """Correct api_key set in settings but wrong key in header → 401."""
-        mock_provider  = _make_mock_provider()
+        mock_provider = _make_mock_provider()
         mock_collector = _make_mock_collector()
         settings = _make_test_settings(api_key="secret")
 
         with (
-            patch("llm_valet.api._build_provider",  return_value=mock_provider),
+            patch("llm_valet.api._build_provider", return_value=mock_provider),
             patch("llm_valet.api._build_collector", return_value=mock_collector),
             patch("llm_valet.api._check_not_root"),
             patch("llm_valet.api._configure_logging"),
@@ -613,35 +629,44 @@ class TestPostForceStop:
 class TestSecurityInputValidation:
     """Model name regex and body size limit (E8a, E8b)."""
 
-    @pytest.mark.parametrize("bad_name", [
-        "test; echo injected",
-        "$(whoami)",
-        "model\x00null",
-        "../../../etc/passwd",
-        "model name with spaces",
-        "",
-    ])
+    @pytest.mark.parametrize(
+        "bad_name",
+        [
+            "test; echo injected",
+            "$(whoami)",
+            "model\x00null",
+            "../../../etc/passwd",
+            "model name with spaces",
+            "",
+        ],
+    )
     def test_load_rejects_invalid_model_name(self, api: tuple, bad_name: str) -> None:
         client, _, _ = api
         r = client.post("/load", json={"model": bad_name})
         assert r.status_code == 422
 
-    @pytest.mark.parametrize("bad_name", [
-        "test; echo injected",
-        "$(whoami)",
-        "../etc/passwd",
-    ])
+    @pytest.mark.parametrize(
+        "bad_name",
+        [
+            "test; echo injected",
+            "$(whoami)",
+            "../etc/passwd",
+        ],
+    )
     def test_pull_rejects_invalid_model_name(self, api: tuple, bad_name: str) -> None:
         client, _, _ = api
         r = client.post("/models/pull", json={"model": bad_name})
         assert r.status_code == 422
 
-    @pytest.mark.parametrize("good_name", [
-        "llama3.2:3b",
-        "qwen3.5:0.8b",
-        "mistral:latest",
-        "my-model_v2.0",
-    ])
+    @pytest.mark.parametrize(
+        "good_name",
+        [
+            "llama3.2:3b",
+            "qwen3.5:0.8b",
+            "mistral:latest",
+            "my-model_v2.0",
+        ],
+    )
     def test_load_accepts_valid_model_name(self, api: tuple, good_name: str) -> None:
         client, _, _ = api
         r = client.post("/load", json={"model": good_name})
@@ -661,15 +686,18 @@ class TestSecurityInputValidation:
 class TestMassAssignment:
     """PUT /config must not allow overwriting security-sensitive Settings fields."""
 
-    @pytest.mark.parametrize("field,value", [
-        ("api_key", "hacked"),
-        ("host", "0.0.0.0"),
-        ("port", 9999),
-        ("provider", "evil"),
-        ("ollama_url", "http://evil.com/"),
-        ("log_file", "/etc/cron.d/evil"),
-        ("key_acknowledged", False),
-    ])
+    @pytest.mark.parametrize(
+        "field,value",
+        [
+            ("api_key", "hacked"),
+            ("host", "0.0.0.0"),
+            ("port", 9999),
+            ("provider", "evil"),
+            ("ollama_url", "http://evil.com/"),
+            ("log_file", "/etc/cron.d/evil"),
+            ("key_acknowledged", False),
+        ],
+    )
     def test_sensitive_fields_ignored_by_put_config(
         self, api: tuple, field: str, value: object
     ) -> None:
@@ -703,7 +731,8 @@ class TestRateLimiting:
 
 
 class TestStateSequencesE9:
-    """E9 — state sequence abuse tests (OWASP API Top 10: A6 Mass Assignment / A7 Security Mis-config)."""
+    """E9 - state sequence abuse tests.
+    OWASP API Top 10: A6 Mass Assignment / A7 Security Mis-config."""
 
     def test_pause_then_resume_fails_when_provider_down(self, api: tuple) -> None:
         """PAUSE → provider goes down → RESUME returns ok=False."""
@@ -786,7 +815,6 @@ class TestStateSequencesE9:
 
     def test_watchdog_status_shows_provider_down_state(self, api: tuple) -> None:
         """GET /watchdog state reflects PROVIDER_DOWN after manual injection."""
-        from llm_valet.watchdog import WatchdogState
         client, _, _ = api
         # Inject PROVIDER_DOWN state by reaching into the app's watchdog
         # via a status call first, then patch via the watchdog endpoint

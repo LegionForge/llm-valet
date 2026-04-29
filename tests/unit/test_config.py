@@ -1,6 +1,5 @@
 """Tests for config loading, env overrides, and settings validation."""
-import os
-import textwrap
+
 from unittest.mock import patch
 
 import pytest
@@ -14,8 +13,8 @@ from llm_valet.config import (
     load_settings,
 )
 
-
 # ── _apply_yaml ────────────────────────────────────────────────────────────────
+
 
 class TestApplyYaml:
     def test_host_applied(self) -> None:
@@ -109,6 +108,7 @@ class TestApplyYaml:
 
 # ── _apply_env_overrides ───────────────────────────────────────────────────────
 
+
 class TestApplyEnvOverrides:
     def test_host_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("LLM_VALET_HOST", "0.0.0.0")
@@ -160,6 +160,7 @@ class TestApplyEnvOverrides:
 
 
 # ── Settings defaults ──────────────────────────────────────────────────────────
+
 
 class TestSettingsDefaults:
     def test_default_host_is_localhost(self) -> None:
@@ -260,6 +261,7 @@ class TestSettingsDefaults:
 
 # ── _validate_provider_url (T6 SSRF) ──────────────────────────────────────────
 
+
 class TestValidateProviderUrl:
     """Cover every branch of the SSRF guard."""
 
@@ -322,6 +324,7 @@ class TestValidateProviderUrl:
 
 # ── _apply_yaml — ollama_url validation ───────────────────────────────────────
 
+
 class TestApplyYamlOllamaUrl:
     def test_valid_ollama_url_accepted(self) -> None:
         s = Settings()
@@ -343,8 +346,11 @@ class TestApplyYamlOllamaUrl:
 
 # ── load_settings — error handling ────────────────────────────────────────────
 
+
 class TestLoadSettingsErrorHandling:
-    def test_corrupt_yaml_returns_defaults(self, tmp_path: pytest.TempdirFactory, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_corrupt_yaml_returns_defaults(
+        self, tmp_path: pytest.TempdirFactory, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Corrupt config.yaml must not raise — fall back to defaults."""
         corrupt = tmp_path / "config.yaml"
         corrupt.write_text("{ bad yaml: [unclosed")

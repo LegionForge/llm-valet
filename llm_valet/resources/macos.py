@@ -18,7 +18,6 @@ logger = logging.getLogger(__name__)
 
 
 class MacOSResourceCollector(ResourceCollector):
-
     def collect(self) -> SystemMetrics:
         return SystemMetrics(
             memory=self._collect_memory(),
@@ -109,9 +108,7 @@ class MacOSResourceCollector(ResourceCollector):
 
             # Apple Silicon: best-effort alloc stats from PerformanceStatistics
             used_bytes: int = (
-                perf.get("Alloc system memory")
-                or perf.get("IOSurface Local Alloc")
-                or 0
+                perf.get("Alloc system memory") or perf.get("IOSurface Local Alloc") or 0
             )
 
             if vram_total_bytes and used_bytes:

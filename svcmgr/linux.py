@@ -16,6 +16,7 @@ background under the current user.
 
 All subprocess calls use shell=False.
 """
+
 import logging
 import os
 import shutil
@@ -25,9 +26,9 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 _OLLAMA_BINARY = "ollama"
-_USER_UNIT     = "ollama.service"
+_USER_UNIT = "ollama.service"
 # Common install locations beyond PATH
-_KNOWN_PATHS   = [
+_KNOWN_PATHS = [
     Path("/usr/local/bin/ollama"),
     Path("/usr/bin/ollama"),
     Path(os.path.expanduser("~/.local/bin/ollama")),
@@ -35,6 +36,7 @@ _KNOWN_PATHS   = [
 
 
 # ── Public interface ──────────────────────────────────────────────────────────
+
 
 def start_service() -> bool:
     """Start Ollama via systemd user service or direct spawn."""
@@ -55,8 +57,7 @@ def stop_service() -> bool:
     if _has_user_unit():
         return _systemctl_user("stop")
     logger.info(
-        "linux svcmgr: no user-level systemd unit found — "
-        "psutil fallback will handle stop"
+        "linux svcmgr: no user-level systemd unit found — " "psutil fallback will handle stop"
     )
     return False
 
@@ -73,6 +74,7 @@ def is_installed() -> bool:
 
 
 # ── Systemd user unit ─────────────────────────────────────────────────────────
+
 
 def _has_user_unit() -> bool:
     """Return True if a user-level systemd ollama unit is enabled or exists."""
@@ -118,6 +120,7 @@ def _systemctl_user(action: str) -> bool:
 
 # ── Direct spawn fallback ─────────────────────────────────────────────────────
 
+
 def _spawn_serve() -> bool:
     """
     Launch `ollama serve` as a detached background process.
@@ -145,6 +148,7 @@ def _spawn_serve() -> bool:
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _find_binary() -> Path | None:
     """Return path to the ollama binary, or None if not found."""

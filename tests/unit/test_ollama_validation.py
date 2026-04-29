@@ -1,7 +1,6 @@
 """Tests for Ollama model name validation — pure logic, no HTTP required."""
-import re
 
-import pytest
+import re
 
 # Mirror the regex from providers/ollama.py so validation tests stay fast and
 # isolated.  If the regex changes there, it must change here too.
@@ -13,6 +12,7 @@ def _valid(name: str) -> bool:
 
 
 # ── Valid names ────────────────────────────────────────────────────────────────
+
 
 class TestValidModelNames:
     def test_simple_name(self) -> None:
@@ -43,6 +43,7 @@ class TestValidModelNames:
 
 
 # ── Invalid names ──────────────────────────────────────────────────────────────
+
 
 class TestInvalidModelNames:
     def test_empty_string(self) -> None:

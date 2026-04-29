@@ -23,13 +23,13 @@ class MemoryMetrics:
 
 @dataclass
 class CPUMetrics:
-    used_pct: float   # 1-second average
+    used_pct: float  # 1-second average
     core_count: int
 
 
 @dataclass
 class GPUMetrics:
-    available: bool              # False if no GPU driver accessible
+    available: bool  # False if no GPU driver accessible
     vram_total_mb: int | None
     vram_used_mb: int | None
     vram_used_pct: float | None
@@ -38,7 +38,7 @@ class GPUMetrics:
 
 @dataclass
 class DiskMetrics:
-    path: str               # monitored mount point ("/" or "C:\\")
+    path: str  # monitored mount point ("/" or "C:\\")
     total_mb: int
     used_mb: int
     free_mb: int
@@ -60,10 +60,10 @@ class ResourceCollector(ABC):
 
     @abstractmethod
     def supported_metrics(self) -> set[str]: ...
-    # e.g. {"memory", "cpu", "gpu", "pressure", "disk"}
-    # Callers check this before trusting Optional fields
 
     def collect_disk(self) -> DiskMetrics:
+        # e.g. {"memory", "cpu", "gpu", "pressure", "disk"}
+        # Callers check this before trusting Optional fields
         """
         Cross-platform disk usage for the system root volume.
         psutil.disk_usage() is identical on macOS, Linux, and Windows —
@@ -85,9 +85,11 @@ class ResourceCollector(ABC):
 @dataclass
 class ResourceThresholds:
     ram_pause_pct: float = 85.0
-    ram_resume_pct: float = 60.0      # hysteresis gap prevents oscillation
+    # must be < ram_pause_pct — gap prevents pause→resume→pause cycling;
+    # reloading the model re-triggers the threshold
+    ram_resume_pct: float = 60.0
     cpu_pause_pct: float = 90.0
-    cpu_sustained_seconds: int = 30   # must exceed threshold for this long before acting
+    cpu_sustained_seconds: int = 30  # must exceed threshold for this long before acting
     gpu_vram_pause_pct: float = 85.0
     pause_timeout_seconds: int = 120  # grace period before resume after resource clears
     check_interval_seconds: int = 10
@@ -143,7 +145,10 @@ class ThresholdEngine:
         # GPU VRAM
         if gpu.available and gpu.vram_used_pct is not None:
             if gpu.vram_used_pct >= t.gpu_vram_pause_pct:
-                return True, f"GPU VRAM {gpu.vram_used_pct:.1f}% >= {t.gpu_vram_pause_pct}% threshold"  # noqa: E501
+                return (
+                    True,
+                    f"GPU VRAM {gpu.vram_used_pct:.1f}% >= {t.gpu_vram_pause_pct}% threshold",
+                )
 
         return False, ""
 

@@ -5,17 +5,18 @@ Uses unittest.mock to intercept httpx.AsyncClient so no real network is
 required.  Tests cover the most critical paths: status(), pause(), resume(),
 load_model(), health_check(), and model name validation.
 """
-from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from llm_valet.providers.base import ProviderStatus
 from llm_valet.providers.ollama import OllamaProvider
 
-
 # ── Mock builders ─────────────────────────────────────────────────────────────
 
-def _http_client(get_resp: MagicMock | None = None, post_resp: MagicMock | None = None) -> MagicMock:
+
+def _http_client(
+    get_resp: MagicMock | None = None, post_resp: MagicMock | None = None
+) -> MagicMock:
     """Return a context-manager-compatible mock for httpx.AsyncClient."""
     client = AsyncMock()
     if get_resp is not None:
@@ -41,6 +42,7 @@ def _ok_resp() -> MagicMock:
 
 # ── health_check() ────────────────────────────────────────────────────────────
 
+
 class TestHealthCheck:
     async def test_returns_true_when_api_tags_200(self) -> None:
         provider = OllamaProvider()
@@ -50,6 +52,7 @@ class TestHealthCheck:
 
     async def test_returns_false_on_http_error(self) -> None:
         import httpx
+
         provider = OllamaProvider()
         client = AsyncMock()
         client.get.side_effect = httpx.ConnectError("refused")
@@ -60,6 +63,7 @@ class TestHealthCheck:
 
 
 # ── status() ─────────────────────────────────────────────────────────────────
+
 
 class TestStatus:
     async def test_returns_not_running_when_health_check_fails(self) -> None:
@@ -84,12 +88,14 @@ class TestStatus:
         provider = OllamaProvider()
         provider.health_check = AsyncMock(return_value=True)  # type: ignore[method-assign]
         api_ps_data = {
-            "models": [{
-                "name": "llama3:latest",
-                "size": 4_000_000_000,       # 4 GB in bytes
-                "size_vram": 3_000_000_000,  # 3 GB GPU portion
-                "context_length": 8192,
-            }]
+            "models": [
+                {
+                    "name": "llama3:latest",
+                    "size": 4_000_000_000,  # 4 GB in bytes
+                    "size_vram": 3_000_000_000,  # 3 GB GPU portion
+                    "context_length": 8192,
+                }
+            ]
         }
         client = _http_client(get_resp=_json_resp(api_ps_data))
         with patch("httpx.AsyncClient", return_value=client):
@@ -97,8 +103,8 @@ class TestStatus:
         assert result.running is True
         assert result.model_loaded is True
         assert result.model_name == "llama3:latest"
-        assert result.memory_used_mb == 3814   # 4_000_000_000 // (1024*1024)
-        assert result.size_vram_mb == 2861     # 3_000_000_000 // (1024*1024)
+        assert result.memory_used_mb == 3814  # 4_000_000_000 // (1024*1024)
+        assert result.size_vram_mb == 2861  # 3_000_000_000 // (1024*1024)
         assert result.loaded_context_length == 8192
 
     async def test_size_vram_zero_returns_none(self) -> None:
@@ -106,12 +112,14 @@ class TestStatus:
         provider = OllamaProvider()
         provider.health_check = AsyncMock(return_value=True)  # type: ignore[method-assign]
         api_ps_data = {
-            "models": [{
-                "name": "llama3:latest",
-                "size": 2_000_000_000,
-                "size_vram": 0,
-                "context_length": 4096,
-            }]
+            "models": [
+                {
+                    "name": "llama3:latest",
+                    "size": 2_000_000_000,
+                    "size_vram": 0,
+                    "context_length": 4096,
+                }
+            ]
         }
         client = _http_client(get_resp=_json_resp(api_ps_data))
         with patch("httpx.AsyncClient", return_value=client):
@@ -122,6 +130,7 @@ class TestStatus:
 
 
 # ── pause() ───────────────────────────────────────────────────────────────────
+
 
 class TestPause:
     async def test_pause_sends_keep_alive_zero(self) -> None:
@@ -138,10 +147,15 @@ class TestPause:
         client.__aexit__ = AsyncMock(return_value=None)
 
         # Mock status() to return a loaded model so _last_loaded_ctx is set
-        provider.status = AsyncMock(return_value=ProviderStatus(  # type: ignore[method-assign]
-            running=True, model_loaded=True, model_name="llama3",
-            memory_used_mb=4096, loaded_context_length=None,
-        ))
+        provider.status = AsyncMock(
+            return_value=ProviderStatus(  # type: ignore[method-assign]
+                running=True,
+                model_loaded=True,
+                model_name="llama3",
+                memory_used_mb=4096,
+                loaded_context_length=None,
+            )
+        )
 
         with patch("httpx.AsyncClient", return_value=client):
             result = await provider.pause()
@@ -152,9 +166,14 @@ class TestPause:
 
     async def test_pause_caches_model_name_on_success(self) -> None:
         provider = OllamaProvider(model_name="llama3")
-        provider.status = AsyncMock(return_value=ProviderStatus(  # type: ignore[method-assign]
-            running=True, model_loaded=True, model_name="llama3", memory_used_mb=4096,
-        ))
+        provider.status = AsyncMock(
+            return_value=ProviderStatus(  # type: ignore[method-assign]
+                running=True,
+                model_loaded=True,
+                model_name="llama3",
+                memory_used_mb=4096,
+            )
+        )
         client = _http_client(post_resp=_json_resp({"done_reason": "unload"}))
         with patch("httpx.AsyncClient", return_value=client):
             await provider.pause()
@@ -162,9 +181,14 @@ class TestPause:
 
     async def test_pause_returns_false_on_unexpected_done_reason(self) -> None:
         provider = OllamaProvider(model_name="llama3")
-        provider.status = AsyncMock(return_value=ProviderStatus(  # type: ignore[method-assign]
-            running=True, model_loaded=True, model_name="llama3", memory_used_mb=4096,
-        ))
+        provider.status = AsyncMock(
+            return_value=ProviderStatus(  # type: ignore[method-assign]
+                running=True,
+                model_loaded=True,
+                model_name="llama3",
+                memory_used_mb=4096,
+            )
+        )
         client = _http_client(post_resp=_json_resp({"done_reason": "stop"}))
         with patch("httpx.AsyncClient", return_value=client):
             result = await provider.pause()
@@ -173,15 +197,21 @@ class TestPause:
     async def test_pause_skips_when_no_model(self) -> None:
         """No model loaded → pause is a no-op that returns True."""
         provider = OllamaProvider()
-        provider.status = AsyncMock(return_value=ProviderStatus(  # type: ignore[method-assign]
-            running=True, model_loaded=False, model_name=None, memory_used_mb=None,
-        ))
+        provider.status = AsyncMock(
+            return_value=ProviderStatus(  # type: ignore[method-assign]
+                running=True,
+                model_loaded=False,
+                model_name=None,
+                memory_used_mb=None,
+            )
+        )
         # _resolve_model() will find nothing and return None
         result = await provider.pause()
         assert result is True
 
 
 # ── resume() ─────────────────────────────────────────────────────────────────
+
 
 class TestResume:
     async def test_resume_sends_keep_alive_minus_one_and_stream_false(self) -> None:
@@ -236,6 +266,7 @@ class TestResume:
 
 
 # ── load_model() ──────────────────────────────────────────────────────────────
+
 
 class TestLoadModel:
     async def test_load_model_sends_correct_payload_no_ctx(self) -> None:
