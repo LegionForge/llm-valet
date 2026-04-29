@@ -49,6 +49,6 @@ and mitigations are documented in [`CLAUDE.md`](CLAUDE.md) (T1–T8). In brief:
 
 ## Scope
 
-In scope: the llm-valet service, API endpoints, WebUI, config handling, subprocess calls.  
+In scope: the llm-valet service, API endpoints, WebUI, config handling, subprocess calls.
 Out of scope: the Ollama service itself, OS-level vulnerabilities, issues in dependencies
 (report those upstream).

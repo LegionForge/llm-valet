@@ -118,7 +118,6 @@ llm-valet/
 import enum
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional
 
 class PressureLevel(enum.Enum):
     NORMAL = "normal"
@@ -140,16 +139,25 @@ class CPUMetrics:
 @dataclass
 class GPUMetrics:
     available: bool             # False if no GPU driver accessible
-    vram_total_mb: Optional[int]
-    vram_used_mb: Optional[int]
-    vram_used_pct: Optional[float]
-    compute_pct: Optional[float]
+    vram_total_mb: int | None
+    vram_used_mb: int | None
+    vram_used_pct: float | None
+    compute_pct: float | None
+
+@dataclass
+class DiskMetrics:
+    path: str                   # monitored mount point ("/" or "C:\\")
+    total_mb: int
+    used_mb: int
+    free_mb: int
+    used_pct: float
 
 @dataclass
 class SystemMetrics:
     memory: MemoryMetrics
     cpu: CPUMetrics
     gpu: GPUMetrics
+    disk: DiskMetrics
     timestamp: float
 
 class ResourceCollector(ABC):
@@ -158,8 +166,12 @@ class ResourceCollector(ABC):
 
     @abstractmethod
     def supported_metrics(self) -> set[str]: ...
-    # e.g. {"memory", "cpu", "gpu", "pressure"}
+    # e.g. {"memory", "cpu", "gpu", "pressure", "disk"}
     # Callers check this before trusting Optional fields
+
+    def collect_disk(self) -> DiskMetrics: ...
+    # Concrete base implementation — cross-platform via psutil.disk_usage().
+    # No need to override in platform subclasses.
 ```
 
 **Platform-specific metric sources:**
@@ -180,17 +192,25 @@ On macOS M-series, **unified memory pressure level** from the `memory_pressure` 
 @dataclass
 class ResourceThresholds:
     ram_pause_pct: float = 85.0
-    ram_resume_pct: float = 60.0     # hysteresis gap prevents oscillation
+    ram_resume_pct: float = 60.0       # must be < ram_pause_pct — hysteresis gap
     cpu_pause_pct: float = 90.0
-    cpu_sustained_seconds: int = 30  # must exceed threshold for this long before acting
+    cpu_sustained_seconds: int = 30    # must exceed threshold for this long before acting
     gpu_vram_pause_pct: float = 85.0
-    pause_timeout_seconds: int = 120 # grace period before resume after resource clears
+    pause_timeout_seconds: int = 120   # grace period before resume after resource clears
     check_interval_seconds: int = 10
+    auto_resume_on_ram_pressure: bool = True
+    # When False: RAM-triggered pauses require manual /resume — prevents oscillation
+    # on machines where the model itself is the dominant RAM consumer.
 
 class ThresholdEngine:
     def __init__(self, thresholds: ResourceThresholds): ...
     def evaluate(self, metrics: SystemMetrics) -> tuple[bool, str]:
-        """Stateless — caller tracks sustained-seconds externally."""
+        # Returns (should_pause, reason). Caller tracks CPU sustained-seconds externally.
+        # RAM and GPU trigger immediately; CPU only signals True (caller counts ticks).
+        ...
+    def evaluate_resume(self, metrics: SystemMetrics) -> tuple[bool, str]:
+        # Returns (safe_to_resume, reason).
+        # All metrics must be below resume thresholds (RAM uses ram_resume_pct for hysteresis).
         ...
 ```
 
@@ -201,8 +221,16 @@ class ThresholdEngine:
 class ProviderStatus:
     running: bool
     model_loaded: bool
-    model_name: Optional[str]
-    memory_used_mb: Optional[int]
+    model_name: str | None
+    memory_used_mb: int | None
+    size_vram_mb: int | None = None          # VRAM portion (Ollama /api/ps size_vram)
+    loaded_context_length: int | None = None # active context window (Ollama /api/ps)
+
+@dataclass
+class ModelInfo:
+    name: str
+    size_mb: int
+    context_length: int | None
 
 class LLMProvider(ABC):
     @abstractmethod
@@ -214,9 +242,19 @@ class LLMProvider(ABC):
     @abstractmethod
     async def resume(self) -> bool: ...
     @abstractmethod
+    async def force_pause(self) -> bool: ...  # evict model regardless of active requests
+    @abstractmethod
     async def status(self) -> ProviderStatus: ...
     @abstractmethod
     async def health_check(self) -> bool: ...
+    @abstractmethod
+    async def list_models(self) -> list[ModelInfo]: ...
+    @abstractmethod
+    async def load_model(self, model_name: str, num_ctx: int | None = None) -> bool: ...
+    @abstractmethod
+    async def delete_model(self, model_name: str) -> bool: ...
+    @abstractmethod
+    async def pull_model(self, model_name: str) -> bool: ...
 ```
 
 The active provider is selected from config (`provider: ollama`) and injected as a FastAPI dependency. `api.py` never imports a concrete provider directly.
@@ -235,32 +273,57 @@ class Watchdog:
     ): ...
 
     async def run(self) -> None:
-        # Every check_interval_seconds:
-        # 1. collector.collect() → SystemMetrics
-        # 2. Check psutil for processes whose exe path contains steamapps/common
-        # 3. ThresholdEngine.evaluate(metrics) → (resource_pressure, reason)
-        # 4. pause if: game detected OR resource_pressure
-        # 5. resume only if: no game AND NOT resource_pressure AND grace period elapsed
-        # 6. Execute provider.pause() / provider.resume() on state change
-        # 7. Log structured entry with reason on every state transition
+        # Loops every check_interval_seconds, delegating all logic to _tick().
+
+    async def stop(self) -> None: ...
+
+    def notify_manual_pause(self) -> None:
+        # Called by the API after a successful manual /pause.
+        # Syncs watchdog state so the auto-resume grace period starts from now.
+        # The API drives the provider call; this method syncs the watchdog view.
+
+    def notify_manual_resume(self) -> None:
+        # Called by the API after a successful manual /resume.
+        # Bypasses evaluate_resume() — model is already loaded, no room-check needed.
 ```
 
-State machine: `RUNNING → PAUSING → PAUSED → RESUMING → RUNNING`. Every transition records its trigger reason (e.g., `"paused — RAM 87% > 85% threshold"` or `"paused — steamapps/common/Hades detected"`).
+**`_tick()` logic (called every interval):**
+
+1. Health probe: `provider.health_check()` — if unhealthy → transition to `PROVIDER_DOWN`; recover passively on next tick when probe succeeds again.
+2. `collector.collect()` → `SystemMetrics`
+3. `_detect_game()` → scans psutil for exe paths containing `steamapps/common`
+4. `ThresholdEngine.evaluate(metrics)` → `(resource_pressure, resource_reason)`
+5. CPU sustained-seconds: accumulate `_cpu_pressure_ticks` while CPU threshold is breached; only count as triggered when `ticks * interval >= cpu_sustained_seconds`
+6. `should_pause = game_detected OR (resource_pressure AND sustained)`
+7. If `RUNNING` and `should_pause`: record `_pause_trigger` (`"ram"` / `"cpu"` / `"gpu"` / `"game"`) → `_transition_to_paused(reason)`
+8. If `PAUSED` and not `should_pause`:
+   a. `ThresholdEngine.evaluate_resume(metrics)` → `(safe_to_resume, resume_reason)` — called first
+   b. If `_pause_trigger == "ram"` and `auto_resume_on_ram_pressure is False` → return (require manual `/resume`)
+   c. If `safe_to_resume` and grace period elapsed → `_transition_to_running(resume_reason)`
+
+State machine: `RUNNING → PAUSING → PAUSED → RESUMING → RUNNING` (plus `PROVIDER_DOWN` for unexpected provider exits). Every transition logs a structured reason string (e.g., `"RAM 87% >= 85% threshold"` or `"game detected — steamapps/common/Hades"`).
 
 ### API Endpoints
 
 | Method | Path | Action |
 |--------|------|--------|
 | GET | `/status` | Provider state + current resource snapshot |
+| GET | `/watchdog` | Watchdog state, last reason, pause trigger |
 | GET | `/metrics` | Live `SystemMetrics` from `ResourceCollector` |
-| POST | `/pause` | Manual pause |
+| POST | `/pause` | Manual pause (graceful) |
+| POST | `/pause/force` | Force-evict model regardless of active requests |
 | POST | `/resume` | Manual resume |
+| GET | `/models` | List models available in the provider |
+| POST | `/load` | Load a specific model by name |
+| DELETE | `/models/{model_name}` | Delete a model from the provider |
+| POST | `/models/pull` | Pull a model from the provider registry |
 | POST | `/start` | Full service start |
 | POST | `/stop` | Graceful service shutdown |
+| POST | `/stop/force` | Immediate service shutdown (no drain) |
 | POST | `/restart` | stop → sleep(2) → start |
 | GET | `/config` | Read current thresholds + watchdog settings |
 | PUT | `/config` | Update thresholds at runtime (persisted to config.yaml) |
-| GET | `/docs` | Auto-generated OpenAPI docs |
+| GET | `/docs` | Auto-generated OpenAPI docs (framework-generated) |
 
 ### WebUI (`static/index.html`)
 
@@ -486,6 +549,33 @@ Design decisions locked. Implementation home: `updater.py`.
 - **Headless safety:** notify via WebUI badge + log entry — never silently execute on a machine with no one watching.
 - **Mandatory user confirmation** before any download — no silent auto-updates.
 
+### Ollama Environment Configuration via llm-valet
+
+**Decision — jp@legionforge.org, 2026-04-28. Post-v1.0.**
+
+Ollama's runtime environment (e.g. `OLLAMA_HOST`, `OLLAMA_FLASH_ATTENTION`, `OLLAMA_KV_CACHE_TYPE`, context window defaults) is currently configured only in the Homebrew plist or system environment — llm-valet reads none of it and exposes none of it in the UI.
+
+Future direction: allow reading and writing Ollama's environment variables from the llm-valet UI and `config.yaml`, then injecting them into the plist (or the process environment on non-launchd platforms) on start. This would make llm-valet the single control surface for both lifecycle and Ollama configuration — particularly valuable in multi-machine deployments where per-machine tuning (KV cache type, host binding, flash attention) would otherwise require SSHing into each machine to edit plists.
+
+Implementation notes when revisited:
+- On macOS Homebrew: read/write `~/Library/LaunchAgents/homebrew.mxcl.ollama.plist` `EnvironmentVariables` dict
+- On Linux systemd: read/write `~/.config/systemd/user/ollama.service` `[Service]` `Environment=` lines
+- On Windows: registry or service wrapper env block
+- `OLLAMA_HOST` changes require a service restart to take effect — surface this clearly in the UI
+- Never overwrite keys the user has set manually without confirmation
+
 ### Model Auto-Update
 
 Ambiguity around what "updated" means for a model. Requires UI-prompted user confirmation. No timeline.
+
+### Pressure-Level Pause Trigger
+
+**Decision — jp@legionforge.org, 2026-04-27. Do not implement before v0.6.0.**
+
+`PressureLevel` is currently informational only — it is collected and reported in `/metrics` but never used as a pause trigger. The reason: loading a model on Apple Silicon routinely produces transient `CRITICAL` pressure readings, so using CRITICAL as a trigger would pause the service on every model load.
+
+The right fix is a sustained-window approach matching the CPU `sustained_seconds` pattern: add `pressure_critical_sustained_seconds: int` to `ResourceThresholds`, accumulate ticks in the watchdog via `_pressure_critical_ticks`, and gate on `"pressure" in collector.supported_metrics()` to avoid behavior divergence on Windows (which derives `PressureLevel` from RAM% thresholds rather than a native OS signal).
+
+Deferred because: (1) the current design is tested and working; (2) the empirical loading-transient duration on M-series hardware has not been measured, so a safe default cannot be set; (3) cross-platform pressure parity is not validated.
+
+When revisiting: measure how long CRITICAL pressure lasts during `keep_alive=-1` model loading on the M4 Mac Mini test hardware. That floor determines the minimum safe `pressure_critical_sustained_seconds` default.

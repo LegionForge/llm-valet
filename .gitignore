@@ -34,3 +34,10 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Cowork overnight dispatch — local only, contains task instructions and output paths
+cowork_handoff.md
+docs/tour-audit-steps-9-13.md
+docs/api-endpoint-gaps.md
+docs/claude-md-drift.md
+docs/static-analysis-baseline.md

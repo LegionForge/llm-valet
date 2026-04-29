@@ -12,10 +12,10 @@ logger = logging.getLogger(__name__)
 
 
 class WatchdogState(enum.Enum):
-    RUNNING       = "running"
-    PAUSING       = "pausing"
-    PAUSED        = "paused"
-    RESUMING      = "resuming"
+    RUNNING = "running"
+    PAUSING = "pausing"
+    PAUSED = "paused"
+    RESUMING = "resuming"
     PROVIDER_DOWN = "provider_down"
 
 
@@ -27,6 +27,7 @@ class Watchdog:
     psutil or any platform API directly for resource data.
 
     State machine: RUNNING → PAUSING → PAUSED → RESUMING → RUNNING
+                   RUNNING / PAUSED → PROVIDER_DOWN → RUNNING
 
     Every state transition is logged with a structured reason string.
     """
@@ -42,11 +43,11 @@ class Watchdog:
         self._thresholds = thresholds
         self._engine = ThresholdEngine(thresholds)
         self._state = WatchdogState.RUNNING
-        self._cpu_pressure_ticks = 0        # counts consecutive ticks above CPU threshold
+        self._cpu_pressure_ticks = 0  # counts consecutive ticks above CPU threshold
         self._paused_at: float | None = None
         self._running = False
-        self._last_reason: str = ""         # reason string from last state transition
-        self._pause_trigger: str = ""       # "ram" | "cpu" | "gpu" | "game" | ""
+        self._last_reason: str = ""  # reason string from last state transition
+        self._pause_trigger: str = ""  # "ram" | "cpu" | "gpu" | "game" | ""
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -141,9 +142,7 @@ class Watchdog:
 
         # Resolve whether we should be paused right now
         should_pause = game_detected or (
-            resource_pressure and (
-                "CPU" not in resource_reason or cpu_sustained
-            )
+            resource_pressure and ("CPU" not in resource_reason or cpu_sustained)
         )
 
         reason = game_reason or resource_reason
@@ -175,10 +174,7 @@ class Watchdog:
 
             # When auto_resume_on_ram_pressure is False, RAM-triggered pauses
             # require manual /resume — prevents model-eviction oscillation.
-            if (
-                self._pause_trigger == "ram"
-                and not self._thresholds.auto_resume_on_ram_pressure
-            ):
+            if self._pause_trigger == "ram" and not self._thresholds.auto_resume_on_ram_pressure:
                 logger.debug(
                     "auto-resume suppressed — RAM-triggered pause requires manual /resume",
                     extra={"auto_resume_on_ram_pressure": False},
@@ -224,6 +220,7 @@ class Watchdog:
 
 
 # ── Game detection ────────────────────────────────────────────────────────────
+
 
 def _detect_game() -> tuple[bool, str]:
     """

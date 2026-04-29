@@ -90,7 +90,8 @@ llm_valet/
 | GET | `/status` | Provider state + current resource snapshot + watchdog last_reason |
 | GET | `/watchdog` | Watchdog state + last transition reason |
 | GET | `/metrics` | Live `SystemMetrics` from `ResourceCollector` |
-| POST | `/pause` | Manual pause |
+| POST | `/pause` | Manual pause — graceful model eviction via keep_alive=0 |
+| POST | `/pause/force` | Force pause — kills inference runner directly; use when `/pause` is blocked by active inference |
 | POST | `/resume` | Manual resume |
 | POST | `/load` | Load a specific model (unloads current first) |
 | GET | `/models` | List all locally available models |
@@ -98,6 +99,7 @@ llm_valet/
 | POST | `/models/pull` | Pull (download) a model — blocks until complete |
 | POST | `/start` | Full service start |
 | POST | `/stop` | Graceful service shutdown |
+| POST | `/stop/force` | Force stop — force-pauses then stops the service; returns immediately, poll `/status` for result |
 | POST | `/restart` | stop → sleep(2) → start |
 | GET | `/config` | Read current thresholds + watchdog settings |
 | PUT | `/config` | Update thresholds at runtime (persisted to config.yaml) |
@@ -195,6 +197,25 @@ sudo apt install python3
 
 llm-valet manages Ollama — it must be installed and running before you install llm-valet.
 
+**Supported Ollama install methods (v1.0):**
+
+| Method | Platform | Lifecycle control | Notes |
+|---|---|---|---|
+| `brew services start ollama` | macOS | ✅ Full | Recommended. launchd manages restart on crash. |
+| Ollama.app (`.dmg`) | macOS | ⚠️ Untested | Code present; not validated in v1.0. |
+| `ollama serve` (manual) | All | ❌ None | Watchdog monitors, but `/start` and `/stop` won't work. |
+| systemd (`--user`) | Linux | ✅ Full | |
+| Windows Service | Windows | ✅ Full | |
+
+> **macOS — use `brew services`, not `ollama serve`.**
+> llm-valet's `/start` and `/stop` commands use `launchctl bootstrap`/`bootout` to manage the Homebrew service. Starting Ollama with `ollama serve` instead bypasses launchd, so those commands will have no effect. The watchdog will still monitor and pause/resume the model, but full lifecycle control requires the service to be launchd-managed.
+
+> **LAN server mode (`OLLAMA_HOST=0.0.0.0`).**
+> If you expose Ollama on your LAN (e.g., for remote coding or multi-machine setups), Ollama's own port (default 11434) has no built-in authentication. llm-valet secures its own API on port 8765 but does not proxy or restrict access to Ollama's port. Restrict port 11434 at the firewall or VLAN level.
+
+> **Multi-machine deployments.**
+> Running one llm-valet instance per machine — each managing its own local Ollama — is a supported pattern. Each instance is independent; there is no cross-machine coordination in v1.0.
+
 ### macOS
 
 <details>
@@ -208,9 +229,11 @@ brew services start ollama
 </details>
 
 <details>
-<summary><strong>Direct download</strong></summary>
+<summary><strong>Direct download (Ollama.app)</strong></summary>
 
 Visit **[ollama.com](https://ollama.com)** and download the macOS installer. Run the `.dmg`, drag Ollama to Applications, and launch it from there. Ollama runs as a menu bar app and starts its local server automatically.
+
+> **Note:** Ollama.app lifecycle control (`/start`, `/stop`) is present in the code but not validated in v1.0. Pause/resume and watchdog monitoring work regardless of install method.
 
 </details>
 
@@ -279,7 +302,7 @@ pip install -e ".[dev]"
 uvicorn llm_valet.api:app --host 127.0.0.1 --port 8765 --reload
 ```
 
-Requirements: Python 3.11+ · fastapi · uvicorn · httpx · psutil · pyyaml  
+Requirements: Python 3.11+ · fastapi · uvicorn · httpx · psutil · pyyaml
 Optional: `pynvml` for NVIDIA GPU metrics on Linux/Windows
 
 ---

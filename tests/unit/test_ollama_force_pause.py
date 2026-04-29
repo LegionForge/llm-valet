@@ -3,12 +3,12 @@ Unit tests for OllamaProvider.force_pause() and runner-kill helpers.
 
 All psutil calls are mocked — no real process enumeration or signal sending.
 """
+
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import psutil
-import pytest
 
 from llm_valet.providers.base import ProviderStatus
 from llm_valet.providers.ollama import (
@@ -17,8 +17,8 @@ from llm_valet.providers.ollama import (
     _kill_ollama_runners,
 )
 
-
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _make_proc(name: str = "", exe: str = "", cmdline: list[str] | None = None) -> MagicMock:
     proc = MagicMock(spec=psutil.Process)
@@ -40,6 +40,7 @@ def _make_status(model_name: str | None = "qwen3.5:0.8b", ctx: int | None = 4096
 
 
 # ── _is_ollama_runner() ───────────────────────────────────────────────────────
+
 
 class TestIsOllamaRunner:
     def test_ollama_llama_runner_in_name(self) -> None:
@@ -84,6 +85,7 @@ class TestIsOllamaRunner:
 
 # ── _kill_ollama_runners() ────────────────────────────────────────────────────
 
+
 class TestKillOllamaRunners:
     def test_kills_matching_process_returns_count(self) -> None:
         runner = _make_proc(name="ollama_llama_runner", exe="/usr/bin/ollama_llama_runner")
@@ -123,6 +125,7 @@ class TestKillOllamaRunners:
 
 
 # ── OllamaProvider.force_pause() ─────────────────────────────────────────────
+
 
 class TestForcePause:
     async def test_kills_runners_and_returns_true(self) -> None:

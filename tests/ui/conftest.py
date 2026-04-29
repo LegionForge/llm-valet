@@ -9,6 +9,7 @@ Requires:
     pip install playwright pytest-playwright
     playwright install chromium
 """
+
 from __future__ import annotations
 
 import http.server
@@ -19,8 +20,8 @@ from typing import Any
 
 import pytest
 
-
 # ── Static file server ────────────────────────────────────────────────────────
+
 
 class _QuietHandler(http.server.SimpleHTTPRequestHandler):
     """SimpleHTTPRequestHandler that serves from the static dir and suppresses logs."""
@@ -59,6 +60,7 @@ def static_server() -> str:  # type: ignore[return]
 
 # ── Mock API response builders ────────────────────────────────────────────────
 
+
 def _status_response(
     model_loaded: bool = False,
     model_name: str | None = None,
@@ -79,10 +81,20 @@ def _status_response(
         "metrics": {
             "memory": {"total_mb": 16384, "used_mb": 8192, "used_pct": 50.0, "pressure": "normal"},
             "cpu": {"used_pct": 5.0, "core_count": 10},
-            "gpu": {"available": False, "vram_total_mb": None, "vram_used_mb": None,
-                    "vram_used_pct": None, "compute_pct": None},
-            "disk": {"path": "/", "total_mb": 200000, "used_mb": 50000,
-                     "free_mb": 150000, "used_pct": 25.0},
+            "gpu": {
+                "available": False,
+                "vram_total_mb": None,
+                "vram_used_mb": None,
+                "vram_used_pct": None,
+                "compute_pct": None,
+            },
+            "disk": {
+                "path": "/",
+                "total_mb": 200000,
+                "used_mb": 50000,
+                "free_mb": 150000,
+                "used_pct": 25.0,
+            },
             "timestamp": 1776350000.0,
         },
         "watchdog": {"state": "running", "last_reason": ""},
@@ -107,6 +119,7 @@ def _models_response(models: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 # ── Page fixture with API mocked ──────────────────────────────────────────────
+
 
 def make_api_mock(page: Any, models: list[dict[str, Any]]) -> None:
     """

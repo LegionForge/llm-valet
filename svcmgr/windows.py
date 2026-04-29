@@ -15,6 +15,7 @@ environments that register it manually (e.g. enterprise deployments).
 
 All subprocess calls use shell=False.
 """
+
 import logging
 import os
 import shutil
@@ -24,15 +25,16 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 # Executable installed by the official Ollama Windows installer
-_LOCALAPPDATA     = Path(os.environ.get("LOCALAPPDATA", "~")).expanduser()
-_OLLAMA_EXE       = _LOCALAPPDATA / "Programs" / "Ollama" / "ollama.exe"
-_OLLAMA_BINARY    = "ollama"
+_LOCALAPPDATA = Path(os.environ.get("LOCALAPPDATA", "~")).expanduser()
+_OLLAMA_EXE = _LOCALAPPDATA / "Programs" / "Ollama" / "ollama.exe"
+_OLLAMA_BINARY = "ollama"
 
 # Windows Service name — only present in manual/enterprise setups
-_SERVICE_NAME     = "Ollama"
+_SERVICE_NAME = "Ollama"
 
 
 # ── Public interface ──────────────────────────────────────────────────────────
+
 
 def start_service() -> bool:
     """Start Ollama via Windows Service (if registered) or direct launch."""
@@ -52,8 +54,7 @@ def stop_service() -> bool:
     if _service_exists():
         return _sc("stop")
     logger.info(
-        "windows svcmgr: no Ollama Windows Service found — "
-        "psutil fallback will handle stop"
+        "windows svcmgr: no Ollama Windows Service found — " "psutil fallback will handle stop"
     )
     return False
 
@@ -70,6 +71,7 @@ def is_installed() -> bool:
 
 
 # ── Windows Service (sc.exe) ──────────────────────────────────────────────────
+
 
 def _service_exists() -> bool:
     """Return True if a Windows Service named 'Ollama' is registered."""
@@ -116,6 +118,7 @@ def _sc(action: str) -> bool:
 
 # ── Direct launch fallback ────────────────────────────────────────────────────
 
+
 def _launch_exe() -> bool:
     """
     Launch the Ollama executable directly (tray-app / no service).
@@ -131,8 +134,8 @@ def _launch_exe() -> bool:
     try:
         # DETACHED_PROCESS (0x00000008) + CREATE_NO_WINDOW (0x08000000)
         # Keeps the child alive independently of our console, no visible window.
-        DETACHED_PROCESS   = 0x00000008
-        CREATE_NO_WINDOW   = 0x08000000
+        DETACHED_PROCESS = 0x00000008
+        CREATE_NO_WINDOW = 0x08000000
         subprocess.Popen(
             [str(binary)],
             stdout=subprocess.DEVNULL,
@@ -147,6 +150,7 @@ def _launch_exe() -> bool:
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _find_binary() -> Path | None:
     """Return path to the ollama binary, checking known locations and PATH."""

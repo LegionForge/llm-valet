@@ -1,4 +1,5 @@
 """Tests for Watchdog.last_reason tracking — pure state machine, no I/O."""
+
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -18,7 +19,7 @@ from llm_valet.watchdog import Watchdog, WatchdogState
 def _make_watchdog(pause_ok: bool = True, resume_ok: bool = True) -> Watchdog:
     """Build a Watchdog with mock provider and collector."""
     provider = MagicMock()
-    provider.pause  = AsyncMock(return_value=pause_ok)
+    provider.pause = AsyncMock(return_value=pause_ok)
     provider.resume = AsyncMock(return_value=resume_ok)
 
     metrics = SystemMetrics(
@@ -50,12 +51,14 @@ def _make_watchdog(pause_ok: bool = True, resume_ok: bool = True) -> Watchdog:
 
 # ── Initial state ──────────────────────────────────────────────────────────────
 
+
 def test_last_reason_empty_on_init() -> None:
     wd = _make_watchdog()
     assert wd.last_reason == ""
 
 
 # ── Manual notifications ───────────────────────────────────────────────────────
+
 
 def test_notify_manual_pause_sets_last_reason() -> None:
     wd = _make_watchdog()
@@ -73,6 +76,7 @@ def test_notify_manual_resume_sets_last_reason() -> None:
 
 
 # ── Transition on successful pause ────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_transition_to_paused_sets_last_reason() -> None:
@@ -92,6 +96,7 @@ async def test_transition_to_paused_fail_does_not_set_last_reason() -> None:
 
 
 # ── Transition on successful resume ───────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_transition_to_running_sets_last_reason() -> None:
@@ -114,10 +119,11 @@ async def test_transition_to_running_fail_preserves_pause_reason() -> None:
 
 # ── auto_resume_on_ram_pressure ───────────────────────────────────────────────
 
+
 def _make_watchdog_no_auto_resume() -> Watchdog:
     """Watchdog with auto_resume_on_ram_pressure=False."""
     provider = MagicMock()
-    provider.pause  = AsyncMock(return_value=True)
+    provider.pause = AsyncMock(return_value=True)
     provider.resume = AsyncMock(return_value=True)
 
     metrics = SystemMetrics(
@@ -126,8 +132,11 @@ def _make_watchdog_no_auto_resume() -> Watchdog:
         ),
         cpu=CPUMetrics(used_pct=20.0, core_count=8),
         gpu=GPUMetrics(
-            available=False, vram_total_mb=None, vram_used_mb=None,
-            vram_used_pct=None, compute_pct=None,
+            available=False,
+            vram_total_mb=None,
+            vram_used_mb=None,
+            vram_used_pct=None,
+            compute_pct=None,
         ),
         disk=DiskMetrics(path="/", total_mb=512000, used_mb=256000, free_mb=256000, used_pct=50.0),
     )
@@ -180,8 +189,5 @@ async def test_game_pause_still_auto_resumes_when_flag_false() -> None:
     # Gate only applies to "ram" trigger
     assert wd._pause_trigger == "game"
     # Gate should not block — game pauses can auto-resume
-    gate_blocks = (
-        wd._pause_trigger == "ram"
-        and not wd._thresholds.auto_resume_on_ram_pressure
-    )
+    gate_blocks = wd._pause_trigger == "ram" and not wd._thresholds.auto_resume_on_ram_pressure
     assert gate_blocks is False

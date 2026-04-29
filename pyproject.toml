@@ -68,6 +68,7 @@ dev = [
     "ruff>=0.4",
     "bandit[toml]>=1.7",
     "mypy>=1.10",
+    "types-PyYAML>=6.0",
     "pip-audit>=2.7",
     "semgrep>=1.70",
     # git hooks
@@ -92,10 +93,11 @@ ignore = [
 "tests/**/*.py" = [
     "S101",   # assert is the correct pytest assertion idiom — not a security risk in tests
     "S106",   # hardcoded password/key — test fixtures always use static test values
+    "S104",   # "0.0.0.0" strings in tests are test data, not interface bind calls
 ]
 
 [tool.bandit]
-exclude_dirs = [".venv", "venv", ".git"]
+exclude_dirs = [".venv", "venv", ".git", "tests"]
 skips = [
     "B404",   # subprocess import — we use it with shell=False throughout; reviewed
     "B603",   # subprocess without shell=True — we already enforce shell=False

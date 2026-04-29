@@ -9,6 +9,7 @@
 
 try:
     from legionforge_dev_rig.fixtures import mock_http_client, respx_mock_base_url
+
     __all__ = ["mock_http_client", "respx_mock_base_url"]
 except ImportError:
     # dev-rig not installed — shared fixtures unavailable, unit tests still run

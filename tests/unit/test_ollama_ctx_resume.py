@@ -7,9 +7,8 @@ at its own default context length, discarding any num_ctx the user had set.
 The fix: pause() reads context_length from /api/ps before eviction and caches
 it in _last_loaded_ctx. resume() re-applies it via options.num_ctx.
 """
-from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from llm_valet.providers.base import ProviderStatus
 from llm_valet.providers.ollama import OllamaProvider
@@ -39,13 +38,19 @@ def _ok_resume_response() -> MagicMock:
 
 # ── pause() captures context_length ───────────────────────────────────────────
 
+
 class TestPauseCapturesContext:
     async def test_captures_loaded_context_length(self) -> None:
         provider = OllamaProvider(model_name="llama3")
-        provider.status = AsyncMock(return_value=ProviderStatus(  # type: ignore[method-assign]
-            running=True, model_loaded=True, model_name="llama3",
-            memory_used_mb=4096, loaded_context_length=8192,
-        ))
+        provider.status = AsyncMock(
+            return_value=ProviderStatus(  # type: ignore[method-assign]
+                running=True,
+                model_loaded=True,
+                model_name="llama3",
+                memory_used_mb=4096,
+                loaded_context_length=8192,
+            )
+        )
         with patch("httpx.AsyncClient", return_value=_mock_http_client(_ok_pause_response())):
             await provider.pause()
 
@@ -55,10 +60,15 @@ class TestPauseCapturesContext:
         """If /api/ps stops reporting context_length, the cached value must be cleared."""
         provider = OllamaProvider(model_name="llama3")
         provider._last_loaded_ctx = 4096  # stale value from a prior pause
-        provider.status = AsyncMock(return_value=ProviderStatus(  # type: ignore[method-assign]
-            running=True, model_loaded=True, model_name="llama3",
-            memory_used_mb=4096, loaded_context_length=None,
-        ))
+        provider.status = AsyncMock(
+            return_value=ProviderStatus(  # type: ignore[method-assign]
+                running=True,
+                model_loaded=True,
+                model_name="llama3",
+                memory_used_mb=4096,
+                loaded_context_length=None,
+            )
+        )
         with patch("httpx.AsyncClient", return_value=_mock_http_client(_ok_pause_response())):
             await provider.pause()
 
@@ -67,9 +77,14 @@ class TestPauseCapturesContext:
     async def test_captures_none_when_no_model_loaded(self) -> None:
         provider = OllamaProvider(model_name="llama3")
         provider._last_loaded_ctx = 8192  # stale
-        provider.status = AsyncMock(return_value=ProviderStatus(  # type: ignore[method-assign]
-            running=True, model_loaded=False, model_name=None, memory_used_mb=None,
-        ))
+        provider.status = AsyncMock(
+            return_value=ProviderStatus(  # type: ignore[method-assign]
+                running=True,
+                model_loaded=False,
+                model_name=None,
+                memory_used_mb=None,
+            )
+        )
         # pause() will skip (no model) after the status() call
         await provider.pause()
 
@@ -77,6 +92,7 @@ class TestPauseCapturesContext:
 
 
 # ── resume() restores context_length ──────────────────────────────────────────
+
 
 class TestResumeRestoresContext:
     async def test_passes_num_ctx_when_captured(self) -> None:

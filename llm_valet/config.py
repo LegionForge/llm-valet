@@ -81,15 +81,13 @@ class Settings:
         Raises ValueError for out-of-range or logically invalid values so the
         API layer can return a 400 without writing corrupt state to disk.
         """
-        _PCT_FIELDS = {
-            "ram_pause_pct", "ram_resume_pct", "cpu_pause_pct", "gpu_vram_pause_pct"
-        }
+        _PCT_FIELDS = {"ram_pause_pct", "ram_resume_pct", "cpu_pause_pct", "gpu_vram_pause_pct"}
         allowed = {f.name for f in ResourceThresholds.__dataclass_fields__.values()}
         candidate = asdict(self.thresholds)
         for key, value in data.items():
             if key in allowed:
                 if key in _PCT_FIELDS:
-                    if not isinstance(value, (int, float)):
+                    if not isinstance(value, int | float):
                         raise ValueError(f"{key} must be a number")
                     if not (0.0 < float(value) <= 100.0):
                         raise ValueError(f"{key} must be between 0 and 100, got {value}")
@@ -138,8 +136,15 @@ def load_settings() -> Settings:
 
 
 def _apply_yaml(settings: Settings, raw: dict[str, Any]) -> None:
-    for key in ("host", "port", "provider", "model_name", "api_key", "key_acknowledged",
-                "log_file"):
+    for key in (
+        "host",
+        "port",
+        "provider",
+        "model_name",
+        "api_key",
+        "key_acknowledged",
+        "log_file",
+    ):
         if key in raw:
             setattr(settings, key, raw[key])
 
@@ -245,8 +250,7 @@ def _save_settings(settings: Settings) -> None:
         _CONFIG_PATH.chmod(0o600)
     except OSError:
         logger.warning(
-            "could not set config.yaml to 0600 — "
-            "delete %s and restart to reset permissions",
+            "could not set config.yaml to 0600 — " "delete %s and restart to reset permissions",
             _CONFIG_PATH,
         )
 
