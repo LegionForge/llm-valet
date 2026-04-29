@@ -1,10 +1,10 @@
 # llm-valet — Roadmap
 
-Last updated: 2026-04-24 (pre-v0.6.0 review complete)
+Last updated: 2026-04-29 (v0.5.5 tour + security fix merged)
 
 ---
 
-## Current state — v0.5.5
+## Current state — v0.5.6
 
 Fully functional on macOS (Apple Silicon + Intel) with Ollama as the provider.
 
@@ -23,7 +23,8 @@ Fully functional on macOS (Apple Silicon + Intel) with Ollama as the provider.
 | Overcommit detection at startup | ✅ |
 | macOS service manager (launchctl, both Ollama variants) | ✅ |
 | Security: T1–T8 threat model implemented | ✅ |
-| Unit test suite: 372 tests, 98% coverage | ✅ |
+| API key timing-safe comparison (hmac.compare_digest) | ✅ |
+| Unit test suite: 378 tests, 98% coverage | ✅ |
 | Linux / Windows resource collectors | ✅ (untested on hardware) |
 | Linux / Windows service managers | ✅ (untested on hardware) |
 
@@ -43,8 +44,9 @@ Fully functional on macOS (Apple Silicon + Intel) with Ollama as the provider.
 | User tour (first-run experience walkthrough) | — |
 | End-to-end validation on Mac Mini (upgrade + clean install) | — |
 | PyPI publish | — |
-| SECURITY.md | — |
-| dev-rig CI integration (reusable workflows, pre-commit) | — |
+| SECURITY.md | ✅ |
+| dev-rig CI integration (reusable workflows, pre-commit) | ✅ Merged PR #7 |
+| Architecture code tour (CodeTour, 13 steps) | ✅ Merged PR #8 |
 
 ---
 
