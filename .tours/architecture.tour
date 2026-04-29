@@ -26,7 +26,7 @@
     },
     {
       "file": "llm_valet/resources/base.py",
-      "line": 88,
+      "line": 90,
       "pattern": "ram_resume_pct: float = 60.0",
       "title": "4 · Hysteresis: preventing pause/resume oscillation",
       "description": "`ram_resume_pct` is intentionally lower than `ram_pause_pct` — this gap is called **hysteresis**, borrowed from control theory.\n\n**What oscillation looks like without it**\n\nSuppose the LLM model uses ~5 GB on a 16 GB machine (31% RAM). With a single threshold at 85%:\n\n1. External pressure pushes RAM to 86% → watchdog pauses — model evicted → RAM drops to ~55%\n2. Resources look fine → watchdog resumes — model reloads → RAM climbs back to ~86%\n3. Loop restarts immediately\n\nThe model spends all its time loading and unloading, never serving inference.\n\n**How the gap fixes it**\n\nWith the default 85%/60% pair, the resume gate only opens below 60%. After eviction, RAM falls to ~55% (safely below 60%), so resume is allowed. Once the model reloads, its footprint pushes RAM to ~86% — above the 60% resume floor but below the 85% pause threshold. The model stays loaded until *external* pressure climbs again.\n\n**Choosing the gap**\n\nNo single value is universally correct — it depends on the model's RAM footprint. A gap of 20–25 percentage points is a reasonable starting point. Too narrow and oscillation returns; too wide and resume is delayed long after resources are genuinely free. There is no formula that works for every model and machine combination — tune `ram_resume_pct` based on your model size and observed behavior.\n\nThe worst case is when the model *is* the dominant RAM consumer: loading it will always push RAM above the resume floor. `auto_resume_on_ram_pressure: false` disables auto-resume for RAM-triggered pauses entirely, requiring a manual `/resume`. This is the escape hatch for that scenario."
@@ -54,35 +54,35 @@
     },
     {
       "file": "llm_valet/watchdog.py",
-      "line": 34,
+      "line": 41,
       "pattern": "self._provider = provider",
       "title": "8 · Watchdog constructor: composed, not coupled",
       "description": "The watchdog receives a `LLMProvider` and a `ResourceCollector` by injection. It never calls `psutil` for resource data — that goes through `collector.collect()` — and it never imports a concrete provider.\n\nThe one place `psutil` does appear in `watchdog.py` is `_detect_game()`, which calls `psutil.process_iter()` to scan for `steamapps/common` paths. Game detection is process enumeration, not resource measurement, so it doesn't belong in `ResourceCollector`.\n\nThis keeps the watchdog testable: swap in mock implementations of `LLMProvider` and `ResourceCollector` and assert state transitions without touching the OS or a real Ollama instance. `ThresholdEngine` is constructed internally because it's pure logic with no external surface."
     },
     {
       "file": "llm_valet/watchdog.py",
-      "line": 78,
+      "line": 79,
       "pattern": "def notify_manual_pause(self) -> None:",
       "title": "9 · Manual pause sync — why this exists",
       "description": "`notify_manual_pause()` and `notify_manual_resume()` are called by the API after a successful `/pause` or `/resume` request.\n\nWithout these, the FSM and the provider are out of sync: the user manually pauses, but the watchdog still thinks the state is `RUNNING` and will try to pause again on the next tick — or worse, immediately resume because resources look fine.\n\nThe API writes the outcome; the watchdog syncs its view to match. This is the handshake that keeps both state machines coherent."
     },
     {
       "file": "llm_valet/watchdog.py",
-      "line": 101,
+      "line": 102,
       "pattern": "async def _tick(self) -> None:",
       "title": "10 · The tick: where everything meets",
       "description": "Every `check_interval_seconds`, `_tick()` runs this sequence:\n\n1. Health-probe the provider — detect unexpected crashes → `PROVIDER_DOWN`\n2. `collector.collect()` → `SystemMetrics`\n3. `_detect_game()` → scan psutil for `steamapps/common` processes\n4. `ThresholdEngine.evaluate(metrics)` → `(resource_pressure, reason)`\n5. Accumulate CPU ticks for the sustained-seconds window\n6. Resolve `should_pause` — game OR (resource pressure AND not CPU-only-or-not-yet-sustained)\n7. If `RUNNING` and `should_pause` → record `_pause_trigger` (ram/cpu/gpu/game) → `_transition_to_paused()`\n8. If `PAUSED` and not `should_pause` → `ThresholdEngine.evaluate_resume(metrics)` → if `_pause_trigger == \"ram\"` and `auto_resume_on_ram_pressure is False` → return (require manual `/resume`) → if safe and grace period elapsed → `_transition_to_running()`"
     },
     {
       "file": "llm_valet/api.py",
-      "line": 191,
+      "line": 194,
       "pattern": "T2 — DNS rebinding: reject any Host header not in the allowlist.",
       "title": "11 · Security middleware: order matters",
       "description": "Three middleware layers protect the API. Understanding their execution order requires knowing how Starlette stacks them: each `add_middleware()` call *prepends* to the internal list, so the **last call is outermost** — it executes first on every incoming request.\n\nRegistration order in the source (first to last): `TrustedHostMiddleware`, body size limit, `CORSMiddleware`.\n\nExecution order on an incoming request (outermost to innermost):\n\n1. **[CORSMiddleware](https://www.starlette.io/middleware/#corsmiddleware)** (last-added, outermost) — handles preflight (`OPTIONS`) requests and injects `Access-Control-*` headers. `allow_origins` is empty by default — no cross-origin access unless explicitly configured (T3). An empty list means same-origin only, the secure default; `allow_origins=[\"*\"]` would allow any website's JavaScript to reach the API from any domain.\n2. **Body size limit** (middle) — a custom `@app.middleware(\"http\")` decorator, not a Starlette built-in (Starlette ships no body-size guard). Drains and buffers the request stream; rejects anything over 64 KB before JSON parsing. `Content-Length` alone is insufficient because chunked transfer encoding omits it.\n3. **[TrustedHostMiddleware](https://www.starlette.io/middleware/#trustedhostmiddleware)** (first-added, innermost) — rejects any `Host` header not in the allowlist before the request reaches a route handler (T2 — DNS rebinding). Without this, a malicious web page can rebind its DNS to `127.0.0.1` and make browser requests that appear local. The allowlist (`localhost`, `127.0.0.1`, `*.local`, plus any LAN IPs when bound to `0.0.0.0`) is the explicit boundary.\n\n**Why these three and not others:** Authentication lives at the dependency layer (`require_api_key`) rather than as a fourth middleware — this lets the setup endpoints (`/setup/*`) opt out cleanly without special-casing middleware logic. Rate limiting is per-endpoint rather than middleware because different endpoints have different limits and cooldowns. IP allowlisting is not used; the `X-API-Key` requirement for non-localhost traffic provides the equivalent gate without maintaining a static list.\n\n`TrustedHostMiddleware` does not need to be outermost to block DNS rebinding — it only needs to run before any handler, which it does regardless of its position in the stack. The body size check runs before host validation to drop oversized requests cheaply."
     },
     {
       "file": "llm_valet/api.py",
-      "line": 263,
+      "line": 264,
       "pattern": "async def require_api_key(",
       "title": "12 · Auth: localhost exempt, LAN requires key",
       "description": "`require_api_key` is injected as a FastAPI dependency on all schema-visible endpoints — both read-only GETs (`/status`, `/watchdog`, `/metrics`, `/models`, `/config`) and mutating operations. Only hidden endpoints (setup flow, `/`, `/favicon.ico`) omit it.\n\nRequests from `127.0.0.1` or `::1` bypass the key check entirely — if you're local, you're trusted. Any other source (LAN, VPN) must supply a valid `X-API-Key`. If `api_key` is not set in config and the host is bound to `0.0.0.0`, all LAN requests get 403 rather than silently passing.\n\nThis mirrors the default bind: `127.0.0.1` is safe without auth; `0.0.0.0` is opt-in and requires a key."
