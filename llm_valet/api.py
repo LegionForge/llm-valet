@@ -1,4 +1,5 @@
 import asyncio
+import hmac
 import ipaddress
 import logging
 import logging.handlers
@@ -66,7 +67,9 @@ class _RateLimiter:
             )
         self._last[key] = now
 
+
 # ── Startup guards ────────────────────────────────────────────────────────────
+
 
 def _check_not_root() -> None:
     if hasattr(os, "getuid") and os.getuid() == 0:
@@ -121,6 +124,7 @@ def _configure_logging(settings: Settings) -> None:
 
 
 # ── App factory ───────────────────────────────────────────────────────────────
+
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     if settings is None:
@@ -269,7 +273,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if client_host not in ("127.0.0.1", "::1"):
             if not settings.api_key:
                 raise HTTPException(status_code=403, detail="LAN access requires api_key in config")
-            if x_api_key != settings.api_key:
+            if not hmac.compare_digest(x_api_key, settings.api_key):
                 raise HTTPException(status_code=401, detail="Unauthorized")
 
     Auth = Annotated[None, Depends(require_api_key)]
@@ -522,9 +526,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         Returns immediately; poll /status for result."""
         # Reuse the /stop rate-limit key — both are destructive service operations
         rate_limiter.check("stop", 3.0)
+
         async def _force_stop() -> None:
             await p.force_pause()
             await p.stop()
+
         background_tasks.add_task(_force_stop)
         return {"ok": True, "action": "force_stop"}
 
@@ -558,10 +564,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> dict[str, Any]:
         """stop → 2s delay → start — returns immediately; poll /status for result."""
         rate_limiter.check("restart", 3.0)
+
         async def _restart() -> None:
             await p.stop()
             await asyncio.sleep(2)
             await p.start()
+
         background_tasks.add_task(_restart)
         return {"ok": True, "action": "restart"}
 
@@ -587,6 +595,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
 # ── Provider / collector selection ───────────────────────────────────────────
 
+
 def _build_provider(settings: Settings) -> LLMProvider:
     if settings.provider == "ollama":
         return OllamaProvider(
@@ -599,16 +608,20 @@ def _build_provider(settings: Settings) -> LLMProvider:
 def _build_collector(settings: Settings) -> ResourceCollector:
     if sys.platform == "darwin":
         from llm_valet.resources.macos import MacOSResourceCollector
+
         return MacOSResourceCollector()
     elif sys.platform == "linux":
         from llm_valet.resources.linux import LinuxResourceCollector
+
         return LinuxResourceCollector()
     else:
         from llm_valet.resources.windows import WindowsResourceCollector
+
         return WindowsResourceCollector()
 
 
 # ── Serialisation helper ──────────────────────────────────────────────────────
+
 
 def _metrics_to_dict(m: SystemMetrics) -> dict[str, Any]:
     return {
@@ -647,6 +660,7 @@ app = create_app()
 
 def main() -> None:
     import uvicorn
+
     settings = load_settings()
     uvicorn.run(
         "llm_valet.api:app",
