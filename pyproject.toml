@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "llm-valet"
+name = "legionforge-llm-valet"
 version = "0.6.0"
 description = "Cross-platform LLM lifecycle manager with resource-pressure and gaming-detection autopause"
 readme = "README.md"

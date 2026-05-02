@@ -6,7 +6,7 @@ set -euo pipefail
 INSTALL_DIR="$HOME/.llm-valet"
 VENV_DIR="$INSTALL_DIR/.venv"
 CONFIG_FILE="$INSTALL_DIR/config.yaml"
-PACKAGE="llm-valet"
+PACKAGE="legionforge-llm-valet"
 MIN_PYTHON_MAJOR=3
 MIN_PYTHON_MINOR=11
 STEPS=5
@@ -98,7 +98,7 @@ if [[ -f "$REPO_ROOT/pyproject.toml" ]]; then
   ok "Local repo detected — installing from source"
   "$VENV_PY" -m pip install --quiet -e "$REPO_ROOT"
 else
-  "$VENV_PY" -m pip install --quiet --upgrade llm-valet
+  "$VENV_PY" -m pip install --quiet --upgrade legionforge-llm-valet
 fi
 ok "Installed $("$VENV_PY" -m pip show llm-valet 2>/dev/null | awk '/^Version:/{print $2}')"
 
