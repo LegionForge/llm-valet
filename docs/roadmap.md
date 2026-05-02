@@ -1,10 +1,10 @@
 # llm-valet — Roadmap
 
-Last updated: 2026-04-30 (integration tests + docs pass)
+Last updated: 2026-05-01 (v0.6.0 integration tests green — 36/36)
 
 ---
 
-## Current state — v0.5.6
+## Current state — v0.6.0-dev (branch: dev)
 
 Fully functional on macOS (Apple Silicon + Intel) with Ollama as the provider.
 
@@ -24,7 +24,8 @@ Fully functional on macOS (Apple Silicon + Intel) with Ollama as the provider.
 | macOS service manager (launchctl, both Ollama variants) | ✅ |
 | Security: T1–T8 threat model implemented | ✅ |
 | API key timing-safe comparison (hmac.compare_digest) | ✅ |
-| Unit test suite: 378 tests, 98% coverage + 36 integration tests | ✅ |
+| Unit test suite: 378 tests, 98% coverage | ✅ |
+| Integration test suite: 36 tests, all passing on Mac Mini M4 | ✅ |
 | Linux / Windows resource collectors | ✅ (untested on hardware) |
 | Linux / Windows service managers | ✅ (untested on hardware) |
 
