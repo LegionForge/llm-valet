@@ -25,6 +25,12 @@ classifiers = [
     "Intended Audience :: Developers",
     "Intended Audience :: System Administrators",
 ]
+[project.urls]
+Homepage = "https://github.com/LegionForge/llm-valet"
+Documentation = "https://github.com/LegionForge/llm-valet/wiki"
+Changelog = "https://github.com/LegionForge/llm-valet/releases"
+"Bug Tracker" = "https://github.com/LegionForge/llm-valet/issues"
+
 dependencies = [
     "fastapi>=0.111",
     "uvicorn[standard]>=0.29",
