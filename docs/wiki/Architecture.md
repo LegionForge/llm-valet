@@ -206,6 +206,30 @@ The `require_api_key` dependency in `api.py` uses `hmac.compare_digest` for cons
 
 ---
 
+## Language and Runtime
+
+llm-valet is written in Python 3.11+. This was a deliberate choice, not a default.
+
+### Why Python
+
+**psutil is the deciding factor.** psutil is a cross-platform library that provides process enumeration, RAM usage, CPU load, and GPU metrics through a single unified API on macOS, Linux, and Windows. It handles the platform differences internally — the same Python call works whether the machine is an Apple Silicon Mac, an AMD Linux box, or a Windows workstation. No equivalent exists in other languages at the same level of maturity and breadth.
+
+Without psutil, the resource monitoring layer would require native platform bindings or shell-outs to OS tools on each platform — which is exactly what psutil already solves, and has solved for over a decade.
+
+**pip distribution fits the target user.** Homebrew installs Python as part of Ollama's dependency chain on macOS. The likely llm-valet user already has Python. `pip install legionforge-llm-valet` requires no additional runtime, no per-platform binary compilation, no package manager beyond what's already present.
+
+**FastAPI + asyncio fit the architecture.** The watchdog is an async polling loop; the REST API is async; the Ollama HTTP client is async. FastAPI provides all of this plus automatic OpenAPI documentation with minimal boilerplate. The performance requirements are trivial — a daemon that wakes every 10 seconds and makes one HTTP call has no meaningful runtime overhead in any language.
+
+### Why not other languages
+
+**Node.js / TypeScript** is a reasonable alternative and would have worked. Node is genuinely cross-platform, TypeScript provides strong typing, and the HTTP client story is good. The gap is resource monitoring: there is no Node equivalent of psutil. Cross-platform process enumeration and RAM/GPU metrics would require native bindings or OS-specific shell commands on each platform.
+
+**Rust or Go** would produce a leaner binary and faster startup, but neither advantage matters for a sleeping daemon. Both would require pre-compiled binaries per platform rather than a pip install, and both have less mature equivalents for psutil's breadth of coverage.
+
+**The performance argument doesn't apply here.** llm-valet is not doing computation — it's polling a REST API and sleeping. A Python process in this role uses roughly 15 MB of RAM and negligible CPU. If a future version needed to process high-frequency metrics streams or handle thousands of concurrent connections, the language choice would be worth revisiting. For a 10-second polling daemon, it doesn't matter.
+
+---
+
 ## Key Design Decisions
 
 ### Provider abstraction
