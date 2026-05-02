@@ -2,6 +2,62 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Release Checklist (Non-Negotiable)
+
+Before tagging any release, work through this sequence in order. Do not push the tag until all doc steps are complete — a release without a wiki sync is an incomplete release.
+
+### 1. Code gate
+- [ ] All unit tests passing (`pytest tests/unit/`)
+- [ ] All integration tests passing (`pytest -m integration tests/integration/`)
+- [ ] Static analysis clean (ruff, bandit, mypy)
+- [ ] Version bumped in `pyproject.toml` and `llm_valet/api.py` (`_VERSION`)
+
+### 2. Documentation review (do this before merging to main)
+
+**Compare each wiki source file against the live codebase.** Ask: has anything changed since the last release that a user or developer would need to know about?
+
+| Source of truth | Wiki file to check | What to look for |
+|---|---|---|
+| `CLAUDE.md` Architecture section | `docs/wiki/Architecture.md` | New components, changed data flows, removed abstractions |
+| `CLAUDE.md` API Endpoints table | `docs/wiki/Module-Reference.md` § api.py | New endpoints, changed signatures, removed routes |
+| `llm_valet/watchdog.py` | `docs/wiki/Architecture.md` § Watchdog FSM | New states, changed tick logic, new triggers |
+| `llm_valet/providers/base.py` | `docs/wiki/Module-Reference.md` § providers | New/changed ABC methods |
+| `llm_valet/resources/base.py` | `docs/wiki/Module-Reference.md` § resources | New dataclass fields, threshold changes |
+| `SECURITY.md` | `docs/wiki/Architecture.md` § Security Model | New threats, changed mitigations |
+
+**If anything changed:** update the wiki source file in `docs/wiki/`, bump its `Applies to` line to the new version and today's date, then sync to the GitHub wiki (step 4).
+
+**If nothing changed:** the wiki source files still need their `Applies to` line bumped to the new version — every page should reflect the release it was last verified against.
+
+### 3. Roadmap and changelog
+- [ ] `docs/roadmap.md` current state updated to new version
+- [ ] Completed items marked ✅
+- [ ] Next milestone defined
+
+### 4. Wiki sync
+```bash
+cd /tmp && rm -rf llm-valet-wiki
+git clone https://github.com/LegionForge/llm-valet.wiki.git llm-valet-wiki
+cp docs/wiki/*.md llm-valet-wiki/
+cd llm-valet-wiki
+git add . && git commit -m "docs: sync wiki to v<version>"
+TOKEN=$(gh auth token)
+git remote set-url origin "https://jp-cruz:${TOKEN}@github.com/LegionForge/llm-valet.wiki.git"
+git push origin master
+```
+
+### 5. Release
+```bash
+git rebase origin/main          # resolve divergence before PR
+gh pr merge <PR#> --merge       # merge dev → main
+git checkout main && git pull
+git tag v<version>
+git push origin v<version>      # triggers publish.yml → PyPI
+gh release create v<version> --generate-notes
+```
+
+---
+
 ## Testing — Live Doc Updates (Non-Negotiable)
 
 When executing or reviewing Mac Mini tests, update `docs/testing/<version>-mac-mini.md` immediately when each test passes or fails — do not batch updates until the end of a session:
