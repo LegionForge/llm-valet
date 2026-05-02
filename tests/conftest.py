@@ -7,6 +7,11 @@
 # Once published:
 #   pip install legionforge-dev-rig
 
+# Settle time after model eviction before the next inference-dependent assertion.
+# Ollama needs ~2s to fully release memory after keep_alive=0; tests that assert
+# on post-eviction state must wait at least this long.
+_EVICTION_SETTLE_S = 1.5
+
 try:
     from legionforge_dev_rig.fixtures import mock_http_client, respx_mock_base_url
 

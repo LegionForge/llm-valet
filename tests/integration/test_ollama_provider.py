@@ -11,11 +11,7 @@ import asyncio
 import pytest
 
 from llm_valet.providers.ollama import OllamaProvider
-
-# Ollama's /api/ps endpoint lags ~1 s after keep_alive=0 eviction — it sets
-# expires_at to near-future rather than clearing the entry immediately.  Tests
-# that assert model_loaded==False must wait for that expiry before polling.
-_EVICTION_SETTLE_S = 1.5
+from tests.conftest import _EVICTION_SETTLE_S
 
 pytestmark = [pytest.mark.integration, pytest.mark.usefixtures("ollama_url")]
 

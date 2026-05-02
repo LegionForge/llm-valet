@@ -82,6 +82,7 @@ dev = [
     # UI / browser tests (requires: playwright install chromium)
     "playwright>=1.40",
     "pytest-playwright>=0.4",
+    "pytest-timeout>=2.3",
 ]
 # semgrep pulls in ruamel.yaml.clib which cannot build on Python 3.14 (ast.Str removed).
 # Install this extra on Python <=3.13 or rely on CI (which runs on Python 3.11).

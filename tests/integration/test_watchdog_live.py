@@ -26,11 +26,7 @@ from llm_valet.resources.base import (
     SystemMetrics,
 )
 from llm_valet.watchdog import Watchdog, WatchdogState
-
-# Ollama's /api/ps lags ~1 s after keep_alive=0 eviction -- set expires_at to
-# near-future rather than clearing immediately.  Tests must wait before asserting
-# model_loaded==False via provider.status().
-_EVICTION_SETTLE_S = 1.5
+from tests.conftest import _EVICTION_SETTLE_S
 
 pytestmark = [pytest.mark.integration, pytest.mark.usefixtures("ollama_url")]
 
