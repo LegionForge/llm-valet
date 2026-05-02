@@ -1,6 +1,6 @@
 # Architecture
 
-> **Applies to `v0.6.0`** — updated 2026-05-02
+> **Applies to `v1.0.0`** — updated 2026-05-02
 
 llm-valet is a cross-platform LLM lifecycle manager. It monitors machine resource pressure and gaming activity, then automatically pauses or resumes the LLM provider to free memory when the machine needs it and restore service when it does not.
 

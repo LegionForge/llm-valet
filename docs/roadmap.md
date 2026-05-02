@@ -1,10 +1,10 @@
 # llm-valet — Roadmap
 
-Last updated: 2026-05-01 (v0.6.0 integration tests green — 36/36)
+Last updated: 2026-05-02 (v1.0.0 tagged and published to PyPI)
 
 ---
 
-## Current state — v0.6.0-dev (branch: dev)
+## Current state — v1.0.0 ✅ SHIPPED
 
 Fully functional on macOS (Apple Silicon + Intel) with Ollama as the provider.
 
@@ -31,9 +31,7 @@ Fully functional on macOS (Apple Silicon + Intel) with Ollama as the provider.
 
 ---
 
-## v0.6.0 — Docs, validation, and PyPI
-
-**Gate:** All items below complete before promoting to v1.0.
+## v0.6.0 — Docs, validation, and PyPI ✅ COMPLETE
 
 | Item | Notes |
 |---|---|
@@ -41,21 +39,19 @@ Fully functional on macOS (Apple Silicon + Intel) with Ollama as the provider.
 | Bug fixes from review (B1–B2, M1–M3, L1–L4) | ✅ Commits 8abbac4, df17f29, d8a42a5 |
 | Integration test harness for api.py, watchdog.py, ollama.py | ✅ 36 tests, tests/integration/ |
 | README complete — install, configure, operate | ✅ Config ref, env vars, first-run section added |
-| GitHub Wiki: Architecture + Module reference | ✅ docs/wiki/ — push to wiki repo before v0.6.0 tag |
+| GitHub Wiki: Architecture + Module reference | ✅ docs/wiki/ synced |
 | User tour (first-run experience walkthrough) | ✅ README first-run section + CodeTour (13 steps) |
-| End-to-end validation on Mac Mini (upgrade + clean install) | — |
-| PyPI publish | — |
+| End-to-end validation on Mac Mini (upgrade + clean install) | ✅ macOS 26.4.1, Python 3.14.4, Ollama 0.21.0 |
+| PyPI publish | ✅ legionforge-llm-valet 0.6.0 — OIDC, zero secrets |
 | SECURITY.md | ✅ |
 | dev-rig CI integration (reusable workflows, pre-commit) | ✅ Merged PR #7 |
 | Architecture code tour (CodeTour, 13 steps) | ✅ Merged PR #8 |
 
 ---
 
-## v1.0 — macOS + Ollama, production-ready
+## v1.0 — macOS + Ollama, production-ready ✅ SHIPPED 2026-05-02
 
-**Definition:** v1.0 ships when v0.6.0 gate passes and the Mac Mini end-to-end test confirms a clean upgrade and clean install both work against a published PyPI package.
-
-**Scope:** macOS only, Ollama only. No new features beyond what ships in v0.6.0.
+**Scope:** macOS only, Ollama only. All v0.6.0 gate criteria passed. PyPI: `legionforge-llm-valet 1.0.0`.
 
 ---
 

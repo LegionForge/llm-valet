@@ -1,6 +1,6 @@
 # llm-valet Wiki
 
-> **Applies to `v0.6.0`** — updated 2026-05-02
+> **Applies to `v1.0.0`** — updated 2026-05-02
 
 llm-valet is a cross-platform utility that manages Ollama (and other LLM providers) lifecycle based on manual control or automatic resource/activity sensing.
 
@@ -17,7 +17,7 @@ llm-valet is a cross-platform utility that manages Ollama (and other LLM provide
 
 - [README](https://github.com/LegionForge/llm-valet#readme) — Install, configure, operate
 - [SECURITY.md](https://github.com/LegionForge/llm-valet/blob/main/SECURITY.md) — Full threat model (T1–T8)
-- [Roadmap](https://github.com/LegionForge/llm-valet/blob/main/docs/roadmap.md) — v0.6.0 gate + post-v1.0 backlog
+- [Roadmap](https://github.com/LegionForge/llm-valet/blob/main/docs/roadmap.md) — v1.0 shipped + post-v1.0 backlog
 - [API docs](http://localhost:8765/docs) — Auto-generated OpenAPI (requires running instance)
 
 ---

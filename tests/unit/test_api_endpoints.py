@@ -756,7 +756,7 @@ class TestStateSequencesE9:
 
     def test_load_restart_load_sequence(self, api: tuple) -> None:
         """LOAD model-a → RESTART → LOAD model-b: second load succeeds."""
-        client, mock_provider, _ = api
+        client, _mock_provider, _ = api
         r = client.post("/load", json={"model": "model-a"})
         assert r.status_code == 200
         assert r.json()["ok"] is True
@@ -770,7 +770,7 @@ class TestStateSequencesE9:
 
     def test_concurrent_load_requests_do_not_crash(self, api: tuple) -> None:
         """Two simultaneous /load requests must both return 200, no 500."""
-        client, mock_provider, _ = api
+        client, _mock_provider, _ = api
         results: list[int] = []
         lock = threading.Lock()
         barrier = threading.Barrier(2)

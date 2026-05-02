@@ -1,6 +1,6 @@
 # Module Reference
 
-> **Applies to `v0.6.0`** — updated 2026-05-02
+> **Applies to `v1.0.0`** — updated 2026-05-02
 
 Public interfaces for every module in llm-valet. Internal helpers (prefixed `_`) are omitted unless they are part of a documented contract.
 
