@@ -377,7 +377,7 @@ class TestOWASPAPI4ResourceConsumption:
     def test_num_ctx_max_int_rejected(self) -> None:
         """num_ctx=2^31 is an integer but beyond Ollama limits.
         Must not crash (no 500) — Ollama will reject it downstream."""
-        app, mock_provider, _ = _app()
+        app, _mock_provider, _ = _app()
         with TestClient(app, raise_server_exceptions=False) as client:
             r = client.post(
                 "/load",
