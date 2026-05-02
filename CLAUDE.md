@@ -2,6 +2,102 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Release Checklist (Non-Negotiable)
+
+Before tagging any release, work through this sequence in order. Do not push the tag until all doc steps are complete — a release without a wiki sync is an incomplete release.
+
+### 1. Code gate
+- [ ] All unit tests passing (`pytest tests/unit/`)
+- [ ] All integration tests passing (`pytest -m integration tests/integration/`)
+- [ ] Static analysis clean (ruff, bandit, mypy)
+- [ ] Version bumped in `pyproject.toml` and `llm_valet/api.py` (`_VERSION`)
+
+### 2. Documentation hierarchy review (do this before merging to main)
+
+Documentation has four levels. Changes flow downward — never edit a lower level without checking the level above it first.
+
+```
+L0  Code          — ultimate truth; everything else describes it
+ ↓
+L1  CLAUDE.md     — internal/AI-facing; dense and precise
+ ↓
+L2  docs/wiki/    — canonical USER-FACING source (edit here, not in the wiki directly)
+ ↓
+L3  GitHub Wiki   — synced FROM L2 (never edited directly)
+    README.md     — user-facing summary drawn from L2
+    CodeTour      — references L0 directly; validated separately
+```
+
+**Drift check: L0 → L1 (code → CLAUDE.md)**
+
+```bash
+git diff v<prev>..HEAD -- llm_valet/
+```
+For each changed file, verify its corresponding CLAUDE.md section still describes it accurately.
+
+**Drift check: L1 → L2 (CLAUDE.md → docs/wiki/)**
+
+| L1 section in CLAUDE.md | L2 file | Section to verify |
+|---|---|---|
+| Architecture diagram + component table | `docs/wiki/Architecture.md` | Component Overview |
+| Watchdog FSM tick logic | `docs/wiki/Architecture.md` | Watchdog FSM |
+| ThresholdEngine interface | `docs/wiki/Architecture.md` | ThresholdEngine |
+| Security model T1–T8 | `docs/wiki/Architecture.md` | Security Model |
+| API Endpoints table | `docs/wiki/Module-Reference.md` | api.py Endpoint Reference |
+| Provider ABC | `docs/wiki/Module-Reference.md` | providers/base.py |
+| ResourceCollector ABC + dataclasses | `docs/wiki/Module-Reference.md` | resources/base.py |
+| svcmgr platform notes | `docs/wiki/Module-Reference.md` | svcmgr/ |
+
+**If L2 content changed:** bump `Applies to` line to new version + today's date.
+**If L2 content unchanged:** bump `Applies to` anyway — it signals "verified current at vX.Y.Z".
+
+**Drift check: L0 → CodeTour**
+
+The tour's 13 step line numbers must point at the right code. Run the validation script:
+```bash
+python3 -c "
+import json, pathlib
+tour = json.loads(pathlib.Path('.tours/architecture.tour').read_text())
+for i, step in enumerate(tour['steps'], 1):
+    f = pathlib.Path(step.get('file',''))
+    ln = step.get('line', 0)
+    exists = f.exists()
+    print(f'Step {i:2d}: {\"OK\" if exists else \"MISSING\":7s} {f}:{ln}')
+"
+```
+If any step is MISSING or points to the wrong construct, update the tour before tagging.
+
+**README.md:** confirm the API table, install instructions, and feature list still match reality. README is a summary — if detail changed in L2, update the README summary to match.
+
+### 3. Roadmap and changelog
+- [ ] `docs/roadmap.md` current state updated to new version
+- [ ] Completed items marked ✅, next milestone defined
+- [ ] GitHub Release notes drafted (`gh release create v<version> --generate-notes`, then edit)
+
+### 4. Wiki sync
+```bash
+cd /tmp && rm -rf llm-valet-wiki
+git clone https://github.com/LegionForge/llm-valet.wiki.git llm-valet-wiki
+cp docs/wiki/*.md llm-valet-wiki/
+cd llm-valet-wiki
+git add . && git commit -m "docs: sync wiki to v<version>"
+TOKEN=$(gh auth token)
+git remote set-url origin "https://jp-cruz:${TOKEN}@github.com/LegionForge/llm-valet.wiki.git"
+git push origin master
+```
+
+### 5. Release
+```bash
+git rebase origin/main          # resolve divergence before PR
+gh pr merge <PR#> --merge       # merge dev → main
+git checkout main && git pull
+git tag v<version>
+git push origin v<version>      # triggers publish.yml → PyPI
+gh release create v<version> --generate-notes
+```
+
+---
+
 ## Testing — Live Doc Updates (Non-Negotiable)
 
 When executing or reviewing Mac Mini tests, update `docs/testing/<version>-mac-mini.md` immediately when each test passes or fails — do not batch updates until the end of a session:

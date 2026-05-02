@@ -25,6 +25,7 @@ classifiers = [
     "Intended Audience :: Developers",
     "Intended Audience :: System Administrators",
 ]
+
 dependencies = [
     "fastapi>=0.111",
     "uvicorn[standard]>=0.29",
@@ -32,6 +33,12 @@ dependencies = [
     "psutil>=5.9",
     "pyyaml>=6.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/LegionForge/llm-valet"
+Documentation = "https://github.com/LegionForge/llm-valet/wiki"
+Changelog = "https://github.com/LegionForge/llm-valet/releases"
+"Bug Tracker" = "https://github.com/LegionForge/llm-valet/issues"
 
 [project.optional-dependencies]
 # ── GPU/NPU monitoring extras ────────────────────────────────────────────────
