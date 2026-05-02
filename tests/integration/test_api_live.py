@@ -18,11 +18,7 @@ from starlette.testclient import TestClient
 from llm_valet.api import create_app
 from llm_valet.config import Settings
 from llm_valet.resources.base import ResourceThresholds
-
-# Ollama's /api/ps lags ~1 s after keep_alive=0 eviction — set expires_at to
-# near-future rather than clearing immediately.  Sync tests must sleep before
-# asserting model_loaded==False.
-_EVICTION_SETTLE_S = 1.5
+from tests.conftest import _EVICTION_SETTLE_S
 
 pytestmark = [pytest.mark.integration, pytest.mark.usefixtures("ollama_url")]
 
