@@ -1,5 +1,7 @@
 # llm-valet Wiki
 
+> **Applies to `v0.6.0`** — updated 2026-05-02
+
 llm-valet is a cross-platform utility that manages Ollama (and other LLM providers) lifecycle based on manual control or automatic resource/activity sensing.
 
 ---
