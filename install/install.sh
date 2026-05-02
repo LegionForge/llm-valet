@@ -100,7 +100,7 @@ if [[ -f "$REPO_ROOT/pyproject.toml" ]]; then
 else
   "$VENV_PY" -m pip install --quiet --upgrade legionforge-llm-valet
 fi
-ok "Installed $("$VENV_PY" -m pip show llm-valet 2>/dev/null | awk '/^Version:/{print $2}')"
+ok "Installed $("$VENV_PY" -m pip show legionforge-llm-valet 2>/dev/null | awk '/^Version:/{print $2}')"
 
 # ── Step 4: Write default config ──────────────────────────────────────────────
 step 4 "Writing configuration..."
