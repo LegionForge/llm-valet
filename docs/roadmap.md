@@ -1,6 +1,6 @@
 # llm-valet — Roadmap
 
-Last updated: 2026-04-29 (v0.5.5 tour + security fix merged)
+Last updated: 2026-04-30 (integration tests + docs pass)
 
 ---
 
@@ -24,7 +24,7 @@ Fully functional on macOS (Apple Silicon + Intel) with Ollama as the provider.
 | macOS service manager (launchctl, both Ollama variants) | ✅ |
 | Security: T1–T8 threat model implemented | ✅ |
 | API key timing-safe comparison (hmac.compare_digest) | ✅ |
-| Unit test suite: 378 tests, 98% coverage | ✅ |
+| Unit test suite: 378 tests, 98% coverage + 36 integration tests | ✅ |
 | Linux / Windows resource collectors | ✅ (untested on hardware) |
 | Linux / Windows service managers | ✅ (untested on hardware) |
 
@@ -38,10 +38,10 @@ Fully functional on macOS (Apple Silicon + Intel) with Ollama as the provider.
 |---|---|
 | Pre-v0.6.0 code review complete | ✅ All findings resolved |
 | Bug fixes from review (B1–B2, M1–M3, L1–L4) | ✅ Commits 8abbac4, df17f29, d8a42a5 |
-| Integration test harness for api.py, watchdog.py, ollama.py | Requires live Ollama instance |
-| README complete — install, configure, operate | — |
-| GitHub Wiki: Architecture + Module reference | — |
-| User tour (first-run experience walkthrough) | — |
+| Integration test harness for api.py, watchdog.py, ollama.py | ✅ 36 tests, tests/integration/ |
+| README complete — install, configure, operate | ✅ Config ref, env vars, first-run section added |
+| GitHub Wiki: Architecture + Module reference | ✅ docs/wiki/ — push to wiki repo before v0.6.0 tag |
+| User tour (first-run experience walkthrough) | ✅ README first-run section + CodeTour (13 steps) |
 | End-to-end validation on Mac Mini (upgrade + clean install) | — |
 | PyPI publish | — |
 | SECURITY.md | ✅ |

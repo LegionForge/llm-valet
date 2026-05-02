@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "llm-valet"
-version = "0.5.6"
+version = "0.6.0"
 description = "Cross-platform LLM lifecycle manager with resource-pressure and gaming-detection autopause"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -121,10 +121,11 @@ llm-valet = "llm_valet.api:main"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-addopts = "--cov=llm_valet --cov-report=term-missing --cov-fail-under=60 --ignore=tests/ui"
+addopts = "--cov=llm_valet --cov-report=term-missing --cov-fail-under=60 --ignore=tests/ui --ignore=tests/integration"
 testpaths = ["tests"]
 markers = [
     "ui: Playwright browser tests — require 'playwright install chromium' (deselected by default)",
+    "integration: Live integration tests — require Ollama running at localhost:11434",
 ]
 
 [tool.coverage.run]
@@ -134,11 +135,11 @@ omit = [
     "llm_valet/resources/macos.py",
     "llm_valet/resources/linux.py",
     "llm_valet/resources/windows.py",
-    # Require a live Ollama instance — covered by integration tests (TODO v1.0)
+    # Require a live Ollama instance — covered by tests/integration/test_ollama_provider.py
     "llm_valet/providers/ollama.py",
-    # FastAPI app wiring — covered by integration tests (TODO v1.0)
+    # FastAPI app wiring — covered by tests/integration/test_api_live.py
     "llm_valet/api.py",
-    # Watchdog loop — requires async integration harness (TODO v1.0)
+    # Watchdog loop — covered by tests/integration/test_watchdog_live.py
     "llm_valet/watchdog.py",
 ]
 

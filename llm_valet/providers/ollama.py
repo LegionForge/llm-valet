@@ -370,13 +370,15 @@ class OllamaProvider(LLMProvider):
         killed = _kill_ollama_runners()
         if killed > 0:
             logger.info("force_pause: killed runner processes", extra={"count": killed})
-            # Brief pause for Ollama to update its internal state before callers poll /api/ps
+            # Wait for Ollama to register the runner exit before sending keep_alive=0.
+            # Without this delay, the keep_alive=0 request races with Ollama potentially
+            # restarting the runner, leaving the model loaded.
             await asyncio.sleep(0.5)
-            return True
 
-        # No runner processes found — model may already be unloaded or not using a
-        # runner subprocess on this platform; fall back to regular keep_alive=0 eviction.
-        logger.info("force_pause: no runner processes found — falling back to pause()")
+        # Always follow up with keep_alive=0 eviction, whether or not a runner was killed.
+        # Killing the runner alone is not sufficient — Ollama may restart it; keep_alive=0
+        # signals Ollama to release the model slot and prevents auto-restart.
+        logger.info("force_pause: evicting via keep_alive=0")
         return await self.pause()
 
     async def pull_model(self, model_name: str) -> bool:
