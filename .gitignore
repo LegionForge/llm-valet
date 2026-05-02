@@ -41,3 +41,6 @@ docs/tour-audit-steps-9-13.md
 docs/api-endpoint-gaps.md
 docs/claude-md-drift.md
 docs/static-analysis-baseline.md
+
+# Local handoff notes — never commit
+jpito_handoff.md

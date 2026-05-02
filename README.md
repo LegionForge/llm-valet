@@ -2,7 +2,7 @@
 
 > Cross-platform drop-in utility that manages Ollama (and other LLM providers) lifecycle based on manual control or automatic resource/activity sensing.
 
-**Platforms:** macOS · Windows
+**Platforms:** macOS · Linux · Windows
 
 ---
 
@@ -273,6 +273,34 @@ Pass `--purge` to also remove your config and logs.
 
 ---
 
+## First-Run Setup
+
+When you open the WebUI (`http://localhost:8765`) for the first time, a setup modal walks you through three steps:
+
+**Step 1 — Save your API key**
+
+A random API key is generated and displayed once. Copy it now — it will not be shown again (though it is always retrievable from `~/.llm-valet/config.yaml`). The key is required for LAN access; local access from the same machine never requires it.
+
+**Step 2 — Network access**
+
+Choose who can connect:
+
+| Option | Binds to | Auth required |
+|---|---|---|
+| This machine only | `127.0.0.1` | No |
+| Local network | `0.0.0.0` | Yes — X-API-Key header |
+| Custom IP | Your chosen address | Yes if not 127.0.0.1 |
+
+The port defaults to `8765`. Click **Next**.
+
+**Step 3 — Confirm and apply**
+
+Review your settings and click **Save & Restart**. llm-valet restarts and applies the new bind address and port. The API key is shown one final time before the modal closes.
+
+After setup, the WebUI becomes the primary control surface — status, resource bars, manual pause/resume, and threshold sliders are all there.
+
+---
+
 ## Quick Start
 
 ```bash
@@ -288,6 +316,62 @@ curl -H "X-API-Key: your-key" -X POST http://mac-mini.local:8765/pause
 ```
 
 Config lives at `~/.llm-valet/config.yaml`.
+
+---
+
+## Configuration Reference
+
+All settings live in `~/.llm-valet/config.yaml`. The file is created with safe defaults on first install. Permissions are enforced to `0600` on every write.
+
+### Full config.yaml with defaults
+
+```yaml
+# Network
+host: 127.0.0.1                       # Bind address. 127.0.0.1 = localhost only; 0.0.0.0 = LAN
+port: 8765                             # Listen port (1024–65535)
+
+# Provider
+provider: ollama                       # LLM provider. Only "ollama" in v1.0.
+ollama_url: http://127.0.0.1:11434     # Ollama API base URL (must be localhost or RFC1918)
+model_name: null                       # Preferred model. null = act on whatever is loaded
+
+# Auth
+api_key: ""                            # Required when host is 0.0.0.0. Set via WebUI or manually.
+key_acknowledged: false                # Set to true after the first-run setup modal completes
+
+# CORS / trusted hosts
+cors_origins: []                       # Allowed CORS origins, e.g. ["http://mac-mini.local:8765"]
+extra_allowed_hosts: []                # Extra Host header values for TrustedHostMiddleware
+
+# Logging
+log_file: ~/.llm-valet/valet.log       # Rotating JSON log (5 MB × 3 backups)
+
+# Watchdog thresholds
+thresholds:
+  ram_pause_pct: 85.0           # Pause when RAM usage exceeds this %
+  ram_resume_pct: 60.0          # Resume only when RAM drops below this % (hysteresis)
+  cpu_pause_pct: 90.0           # Pause when CPU usage exceeds this %
+  cpu_sustained_seconds: 30     # CPU must exceed threshold for this many seconds before pausing
+  gpu_vram_pause_pct: 85.0      # Pause when GPU VRAM exceeds this %
+  pause_timeout_seconds: 120    # Grace period (seconds) before auto-resume after pressure clears
+  check_interval_seconds: 10    # Watchdog poll interval (seconds, minimum 1)
+  auto_resume_on_ram_pressure: true  # false = RAM-triggered pauses require manual /resume
+```
+
+All threshold percentages must be in the range `0–100`. `ram_resume_pct` must be lower than `ram_pause_pct` — the gap between them is the hysteresis dead zone that prevents oscillation.
+
+Thresholds can also be updated at runtime without restarting via `PUT /config` or the WebUI sliders — changes are persisted immediately.
+
+### Environment variable overrides
+
+Four settings can be overridden at launch via environment variables. Env vars take precedence over `config.yaml`.
+
+| Variable | Overrides | Example |
+|---|---|---|
+| `LLM_VALET_HOST` | `host` | `LLM_VALET_HOST=0.0.0.0` |
+| `LLM_VALET_PORT` | `port` | `LLM_VALET_PORT=9000` |
+| `LLM_VALET_API_KEY` | `api_key` | `LLM_VALET_API_KEY=mysecret` |
+| `LLM_VALET_PROVIDER` | `provider` | `LLM_VALET_PROVIDER=ollama` |
 
 ---
 

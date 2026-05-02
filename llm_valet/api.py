@@ -28,7 +28,7 @@ from llm_valet.watchdog import Watchdog
 
 logger = logging.getLogger(__name__)
 
-_VERSION = "0.5.5"
+_VERSION = "0.6.0"
 
 # T4 — model names are passed to Ollama CLI/API; only safe characters allowed.
 # Prevents injection even though shell=False is enforced throughout.

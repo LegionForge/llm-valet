@@ -128,16 +128,21 @@ class TestKillOllamaRunners:
 
 
 class TestForcePause:
-    async def test_kills_runners_and_returns_true(self) -> None:
+    async def test_kills_runners_and_calls_pause(self) -> None:
+        # force_pause always calls pause() after killing runners — killing alone is not
+        # sufficient because Ollama may restart the runner; keep_alive=0 prevents that.
         provider = OllamaProvider()
         provider.status = AsyncMock(return_value=_make_status())  # type: ignore[method-assign]
+        provider.pause = AsyncMock(return_value=True)  # type: ignore[method-assign]
         with patch("llm_valet.providers.ollama._kill_ollama_runners", return_value=1):
             result = await provider.force_pause()
+        provider.pause.assert_called_once()
         assert result is True
 
     async def test_captures_model_name_before_kill(self) -> None:
         provider = OllamaProvider()
         provider.status = AsyncMock(return_value=_make_status(model_name="mistral:7b", ctx=16384))  # type: ignore[method-assign]
+        provider.pause = AsyncMock(return_value=True)  # type: ignore[method-assign]
         with patch("llm_valet.providers.ollama._kill_ollama_runners", return_value=1):
             await provider.force_pause()
         assert provider._last_loaded_model == "mistral:7b"
@@ -169,6 +174,7 @@ class TestForcePause:
         provider.status = AsyncMock(  # type: ignore[method-assign]
             return_value=_make_status(model_name="qwen3.5:0.8b", ctx=65536)
         )
+        provider.pause = AsyncMock(return_value=True)  # type: ignore[method-assign]
         with patch("llm_valet.providers.ollama._kill_ollama_runners", return_value=1):
             await provider.force_pause()
         assert provider._last_loaded_ctx == 65536
