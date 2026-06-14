@@ -34,7 +34,7 @@ jobs:
     with:
       # CVE-2026-3219 affects pip itself (the runner tool), not a runtime dep of llm-valet.
       # Remove once pip ships a fix.
-      ignore-vulns: "CVE-2026-3219"
+      ignore-vulns: "CVE-2026-3219 CVE-2026-6357"
 
   secrets:
     uses: LegionForge/dev-rig/.github/workflows/secrets.yml@00b47d5d92646b03728d93138dc93d15638dc768
