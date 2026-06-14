@@ -659,7 +659,27 @@ app = create_app()
 
 
 def main() -> None:
+    import argparse
+    import importlib.metadata
+
     import uvicorn
+
+    try:
+        pkg_version = importlib.metadata.version("legionforge-llm-valet")
+    except importlib.metadata.PackageNotFoundError:
+        pkg_version = _VERSION
+
+    parser = argparse.ArgumentParser(
+        prog="llm-valet",
+        description="LLM lifecycle manager with resource-pressure and gaming-detection auto-pause",
+    )
+    parser.add_argument(
+        "-V",
+        "--version",
+        action="version",
+        version=f"%(prog)s {pkg_version}",
+    )
+    parser.parse_args()
 
     settings = load_settings()
     uvicorn.run(
