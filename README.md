@@ -4,7 +4,7 @@
 
 **Platforms:** macOS · Linux · Windows
 
-💛 [Support this project](https://legionforge.org/donations) — LegionForge is open-source and independently maintained.
+💛 [Donate to LegionForge](https://legionforge.org/donations) — LegionForge is open-source and independently maintained.
 
 ---
 
