@@ -8,38 +8,45 @@ on:
 
 # dev-rig SHA — bump this intentionally when upgrading shared workflows.
 # Pinned so accidental changes in dev-rig never silently affect this repo.
-# Current: 00b47d5 fix(ci): sbom stdout redirect + gitleaks CLI (no license required)
+# Current: 0f6301e fix(ci): harden pip audit toolchain (#14) -- upgrades
+# pip/setuptools/msgpack before running pip-audit, fixing a false-positive
+# CVE (PYSEC-2026-3447 in the runner image's stock setuptools 79.0.1) that
+# the previous pin (00b47d5) had no defense against. Verified via
+# `gh api repos/LegionForge/dev-rig/compare/00b47d5...0f6301e`: every other
+# file touched between these two SHAs is a same-signature action-version
+# bump (checkout v4->v7, setup-python v5->v6, codeql v3->v4,
+# upload-artifact v4->v7) or new Node/Rust workflows this repo doesn't use.
 
 jobs:
   lint:
-    uses: LegionForge/dev-rig/.github/workflows/lint.yml@00b47d5d92646b03728d93138dc93d15638dc768
+    uses: LegionForge/dev-rig/.github/workflows/lint.yml@0f6301e8c03da6940ee3335790cde8a766602888
     with:
       source-dirs: "llm_valet svcmgr"
 
   test:
-    uses: LegionForge/dev-rig/.github/workflows/test.yml@00b47d5d92646b03728d93138dc93d15638dc768
+    uses: LegionForge/dev-rig/.github/workflows/test.yml@0f6301e8c03da6940ee3335790cde8a766602888
     with:
       coverage-source: "llm_valet"
       coverage-threshold: 80
 
   sast:
-    uses: LegionForge/dev-rig/.github/workflows/sast.yml@00b47d5d92646b03728d93138dc93d15638dc768
+    uses: LegionForge/dev-rig/.github/workflows/sast.yml@0f6301e8c03da6940ee3335790cde8a766602888
     with:
       source-dirs: "llm_valet/"
     permissions:
       security-events: write
 
   audit:
-    uses: LegionForge/dev-rig/.github/workflows/audit.yml@00b47d5d92646b03728d93138dc93d15638dc768
+    uses: LegionForge/dev-rig/.github/workflows/audit.yml@0f6301e8c03da6940ee3335790cde8a766602888
     with:
       # CVE-2026-3219 affects pip itself (the runner tool), not a runtime dep of llm-valet.
       # Remove once pip ships a fix.
       ignore-vulns: "CVE-2026-3219 CVE-2026-6357"
 
   secrets:
-    uses: LegionForge/dev-rig/.github/workflows/secrets.yml@00b47d5d92646b03728d93138dc93d15638dc768
+    uses: LegionForge/dev-rig/.github/workflows/secrets.yml@0f6301e8c03da6940ee3335790cde8a766602888
     permissions:
       contents: read
 
   sbom:
-    uses: LegionForge/dev-rig/.github/workflows/sbom.yml@00b47d5d92646b03728d93138dc93d15638dc768
+    uses: LegionForge/dev-rig/.github/workflows/sbom.yml@0f6301e8c03da6940ee3335790cde8a766602888
