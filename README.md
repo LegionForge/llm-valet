@@ -4,8 +4,6 @@
 
 **Platforms:** macOS · Linux · Windows
 
-💛 [Donate to LegionForge](https://legionforge.org/donations) — LegionForge is open-source and independently maintained.
-
 ---
 
 ## What It Does
@@ -795,3 +793,6 @@ llm-valet stands on the shoulders of these open source projects:
 MIT License — Copyright (c) 2026 [LegionForge](https://github.com/LegionForge) · jp@legionforge.org
 
 Attribution required: all copies and distributions must include the above copyright notice per the MIT license terms.
+
+If you find llm-valet useful, [donations to LegionForge](https://legionforge.org/donations)
+help support ongoing development — entirely optional, never required.
