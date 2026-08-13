@@ -4,11 +4,18 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: "daily"
       time: "03:00"
     allow:
       - dependency-type: "direct"
+    groups:
+      # init/autobuild/analyze are separate step references into the same
+      # action repo and must stay version-matched -- an ungrouped update
+      # can bump one and leave the others behind, breaking CodeQL with
+      # "Loaded a configuration file for version X, but running version Y".
+      codeql-action:
+        patterns:
+          - "github/codeql-action/*"
     reviewers:
       - "jp-cruz"
     assignees:
@@ -23,8 +30,7 @@ updates:
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: "daily"
       time: "04:00"
     allow:
       - dependency-type: "all"
