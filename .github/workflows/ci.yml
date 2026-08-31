@@ -34,7 +34,9 @@ jobs:
     with:
       source-dirs: "llm_valet/"
     permissions:
+      contents: read
       security-events: write
+      actions: read
 
   audit:
     uses: LegionForge/dev-rig/.github/workflows/audit.yml@0f6301e8c03da6940ee3335790cde8a766602888
